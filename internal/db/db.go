@@ -154,12 +154,44 @@ func InitMongo() {
 	Users = dbOne.Collection("users")
 	Tags = dbOne.Collection("tags")
 
-	if names, err := Users.Indexes().CreateOne(context.TODO(), mongo.IndexModel{
+	if names, err := Nodes.Indexes().CreateMany(context.TODO(), []mongo.IndexModel{
+		{
+			Keys: bson.D{{Key: "type", Value: 1}},
+		},
+		{
+			Keys: bson.D{
+				{Key: "gender", Value: 1},
+				{Key: "geohash", Value: 1},
+				{Key: "age", Value: 1},
+				{Key: "interests", Value: 1},
+			},
+		},
+	}); err != nil {
+		log.Println("InitMongo error creating user indexes:", err)
+	} else {
+		log.Println("Nodes indexes:", names)
+	}
+}
+
+func InitMongo2() {
+	// TODO set in env
+	uri := "mongodb://localhost:27100,localhost:27200"
+	opt := options.Client().
+		SetReadPreference(readpref.Nearest()).
+		ApplyURI(uri)
+
+	Mongo, err = mongo.Connect(context.TODO(), opt)
+	utils.Must(err)
+	dbOne = Mongo.Database("one")
+	Nodes = dbOne.Collection("nodes")
+	Tags = dbOne.Collection("tags")
+
+	if names, err := Nodes.Indexes().CreateOne(context.TODO(), mongo.IndexModel{
 		Keys: bson.D{
-			{Key: "gender", Value: 1},
-			{Key: "geohash", Value: 1},
-			{Key: "age", Value: 1},
-			{Key: "interests", Value: 1},
+			{Key: "user.gender", Value: 1},
+			{Key: "user.geohash", Value: 1},
+			{Key: "user.age", Value: 1},
+			{Key: "user.interests", Value: 1},
 		},
 	}); err != nil {
 		log.Println("InitMongo error creating user indexes:", err)

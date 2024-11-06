@@ -40,7 +40,7 @@ type connManager struct {
 
 var UserConnectionManager = &connManager{
 	name:       "User",
-	ticker:     time.NewTicker(time.Second * 4),
+	ticker:     time.NewTicker(time.Second * 30),
 	addConn:    make(chan *longconn),
 	initMsgCh:  make(chan *initMsg),
 	conns:      make(map[string](map[string]*longconn)),
@@ -51,7 +51,7 @@ var UserConnectionManager = &connManager{
 
 var NodeConnectionManager = &connManager{
 	name:       "Node",
-	ticker:     time.NewTicker(time.Second * 4),
+	ticker:     time.NewTicker(time.Second * 30),
 	addConn:    make(chan *longconn),
 	initMsgCh:  make(chan *initMsg),
 	conns:      make(map[string](map[string]*longconn)),
@@ -87,8 +87,8 @@ func (cm *connManager) Run() {
 			initMsgBuf.Write(im.element)
 			if idconns := cm.conns[im.id]; idconns != nil {
 				if td := idconns[im.iddev]; td != nil {
-					log.Printf("%s broadcast init message for id=%s, iddev=%s\n",
-						cm.name, im.id, im.iddev)
+					log.Printf("%s init msg len=%d for id=%s, iddev=%s\n",
+						cm.name, len(im.element), im.id, im.iddev)
 					td.w.Write(initMsgBuf.Bytes())
 					td.w.(http.Flusher).Flush()
 				}
@@ -123,16 +123,19 @@ func (cm *connManager) Run() {
 
 		case c := <-cm.addConn:
 			if cm.conns[c.id] == nil {
+				log.Printf("%s conns map id=%s is null, creating the map",
+					cm.name, c.id)
 				cm.conns[c.id] = make(map[string]*longconn)
 			}
 			if cc := cm.conns[c.id][c.iddev]; cc != nil {
-				log.Printf("%s duplicate connection id=%s, iddev=%s: replacing it\n",
+				log.Printf("%s duplicate conn id=%s, iddev=%s: replacing it\n",
 					cm.name, c.id, c.iddev)
 				cc.close <- struct{}{}
 				close(cc.close)
 				delete(cm.conns[c.id], cc.iddev)
 			}
-			log.Printf("%s ddding conn for id=%s, dev=%s\n", cm.name, c.id, c.iddev)
+			log.Printf("%s adding conn for id=%s, iddev=%s\n",
+				cm.name, c.id, c.iddev)
 			cm.conns[c.id][c.iddev] = c
 
 		case m := <-cm.Broadcast:
@@ -156,25 +159,25 @@ func (cm *connManager) Run() {
 func HandleNodeConnection(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	id, iddev := r.PathValue("id"), r.PathValue("iddev")
-	if close, err := NodeConnectionManager.handleConn(id, iddev, w); err != nil {
+	close, err := NodeConnectionManager.handleConn(id, iddev, w)
+	if err != nil {
 		w.WriteHeader(500)
 		log.Println("HandleUserConnection error:", err)
 		return
-	} else {
-		<-close
 	}
+	<-close
 	log.Printf("Terminating Node conn for id=%s, iddev=%s\n", id, iddev)
 }
 
 func HandleUserConnection(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	id, iddev := r.PathValue("id"), r.PathValue("iddev")
-	if close, err := UserConnectionManager.handleConn(id, iddev, w); err != nil {
+	close, err := UserConnectionManager.handleConn(id, iddev, w)
+	if err != nil {
 		w.WriteHeader(500)
 		log.Println("HandleUserConnection error:", err)
 		return
-	} else {
-		<-close
 	}
+	<-close
 	log.Printf("Terminating User conn for id=%s, iddev=%s\n", id, iddev)
 }

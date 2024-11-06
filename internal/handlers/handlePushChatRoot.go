@@ -3,6 +3,9 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
+
 	// "log"
 	// "net/http"
 	"strings"
@@ -93,21 +96,81 @@ func PushToSet(table string, field string, values []string, targets []string) er
 // 	}
 // }
 
-// func PushMediasToId(id string, medias []string) error {
-// 	return AddToSetMongo(db.Users, )
+func PushMediasToId(id, mediaType string, medias []string) error {
+	filter := bson.M{"_id": id}
+	update := bson.M{"$addToSet": bson.M{mediaType: bson.M{"$each": medias}}}
+	_, err := db.Users.UpdateMany(context.Background(), filter, update)
+	return err
+}
 
-// 	filter := bson.M{"_id": id}
-// 	update := bson.M{"$addToSet": bson.M{"medias": bson.M{"$each": medias}}}
-// 	_, err := db.Users.UpdateMany(context.Background(), filter, update)
-// 	return err
-// }
+func PushMediasToId2(id, mediaType string, medias []string) error {
+	filter := bson.M{"_id": id}
+	updateKey := "user." + mediaType
+	update := bson.M{"$addToSet": bson.M{updateKey: bson.M{"$each": medias}}}
+	_, err := db.Nodes.UpdateMany(context.Background(), filter, update)
+	return err
+}
 
-// func HandlePushMedias(w http.ResponseWriter, r *http.Request) {
-// 	medias := strings.Split(r.PathValue("medias"), ",")
-// 	id := r.PathValue("id")
-// 	if err := PushMediasToId(id, medias); err != nil {
-// 		log.Println("HandlePushMedias error: ", err)
-// 		w.WriteHeader(500)
-// 		w.Write([]byte(err.Error()))
-// 	}
-// }
+func PushRoot(root string, userIds []string) error {
+	filter := bson.M{"_id": bson.M{"$in": userIds}}
+	update := bson.M{"$addToSet": bson.M{"roots": root}}
+	_, err := db.Users.UpdateMany(context.Background(), filter, update)
+	return err
+}
+
+func HandlePushRoot(w http.ResponseWriter, r *http.Request) {
+	root := r.PathValue("root")
+	userIds := strings.Split(r.PathValue("ids"), ",")
+	err := PushRoot(root, userIds)
+	if err != nil {
+		log.Println("HandlePushRoot error:", err)
+		w.WriteHeader(500)
+	}
+}
+
+func HandleUpdateInterests(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	interests := strings.Split(r.PathValue("interests"), ",")
+	update := bson.M{"$set": bson.M{"interests": interests}}
+	_, err := db.Nodes.UpdateByID(context.Background(), id, update)
+	if err != nil {
+		log.Println("HandleUpdateInterests error:", err)
+		w.WriteHeader(500)
+	}
+}
+
+func HandlePushMedias(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	medias := strings.Split(r.PathValue("medias"), ",")
+	mediaType := r.PathValue("type")
+	if err := PushMediasToId(id, mediaType, medias); err != nil {
+		log.Println("HandlePushMedias error:", err)
+		w.WriteHeader(500)
+	}
+}
+
+func HandlePushNfts(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ids := strings.Split(r.PathValue("ids"), ",")
+	if len(ids) < 1 {
+		log.Println("HandlePushNfts: no ids")
+		return
+	}
+
+	update := bson.M{"$addToSet": bson.M{"nfts": bson.M{"$each": ids}}}
+	_, err := db.Users.UpdateByID(context.Background(), id, update)
+	if err != nil {
+		log.Println("HandlePushNfts error:", err)
+		w.WriteHeader(500)
+	}
+}
+
+func HandlePushMedias2(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	medias := strings.Split(r.PathValue("medias"), ",")
+	mediaType := r.PathValue("type")
+	if err := PushMediasToId2(id, mediaType, medias); err != nil {
+		log.Println("HandlePushMedias error:", err)
+		w.WriteHeader(500)
+	}
+}

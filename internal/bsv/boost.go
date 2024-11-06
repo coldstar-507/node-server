@@ -9,34 +9,32 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"net"
 	"net/http"
+	"sync"
 
 	"firebase.google.com/go/v4/messaging"
 	"github.com/coldstar-507/flatgen"
 	"github.com/coldstar-507/node-server/internal/db"
 	"github.com/coldstar-507/utils"
 	"github.com/mmcloughlin/geohash"
-	"github.com/vmihailenco/msgpack/v5"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const taal_api_key = "testnet_3860616b1cf1bb23110db44440f65899"
 
-type latlon struct {
-	Lat     float64 `msgpack:"lat"`
-	Lon     float64 `msgpack:"lon"`
-	RefDist float64 `msgpack:"refDist"`
+type LatLon struct {
+	Lat     float64 `msgpack:"lat" json:"lat"`
+	Lon     float64 `msgpack:"lon" json:"lon"`
+	RefDist float64 `msgpack:"refDist" json:"refDist"`
 }
 
-const precision = 4
+const GeohashPrecision = 4
 
-func sendNotification(header, body, token string) (string, error) {
+func SendNotification(header, body, token string) (string, error) {
 	return db.Messager.Send(context.Background(), &messaging.Message{
 		Token: token,
 		Notification: &messaging.Notification{
@@ -45,7 +43,7 @@ func sendNotification(header, body, token string) (string, error) {
 		}})
 }
 
-func geoDist(ll1, ll2 latlon) float64 {
+func GeoDist(ll1, ll2 LatLon) float64 {
 	lat1, lon1, lat2, lon2 := ll1.Lat, ll1.Lon, ll2.Lat, ll2.Lon
 	R := 6371.0                   // Radius of the earth in km
 	dLat := degToRad(lat2 - lat1) // degToRad below
@@ -59,20 +57,7 @@ func geoDist(ll1, ll2 latlon) float64 {
 	return d
 }
 
-func geoDist_(lat1, lon1, lat2, lon2 float64) float64 {
-	R := 6371.0                   // Radius of the earth in km
-	dLat := degToRad(lat2 - lat1) // degToRad below
-	dLon := degToRad(lon2 - lon1)
-	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
-		math.Cos(degToRad(lat1))*math.Cos(degToRad(lat2))*
-			math.Sin(dLon/2)*math.Sin(dLon/2)
-
-	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-	d := R * c // Distance in km
-	return d
-}
-
-func geoBearing(ll1, ll2 latlon) float64 {
+func geoBearing(ll1, ll2 LatLon) float64 {
 	lat1, lon1, lat2, lon2 := ll1.Lat, ll1.Lon, ll2.Lat, ll2.Lon
 	// Convert degrees to radians
 	lat1Rad := degToRad(lat1)
@@ -98,23 +83,23 @@ func radToDeg(rad float64) float64 {
 	return rad * 180.0 / math.Pi
 }
 
-func closest(l []latlon, p latlon) latlon {
-	ix, smallDist := int(0), math.MaxFloat64
-	for i, x := range l {
-		dist := geoDist(x, p)
-		if dist < smallDist {
-			smallDist = dist
-			ix = i
-		}
-	}
-	return l[ix]
-}
+// func closest(l []latlon, p latlon) latlon {
+// 	ix, smallDist := int(0), math.MaxFloat64
+// 	for i, x := range l {
+// 		dist := geoDist(x, p)
+// 		if dist < smallDist {
+// 			smallDist = dist
+// 			ix = i
+// 		}
+// 	}
+// 	return l[ix]
+// }
 
-func closest2(l []latlon, p latlon) []latlon {
+func closest2(l []LatLon, p LatLon) []LatLon {
 	ix, smallDist := int(0), math.MaxFloat64
 	ix2, smallDist2 := int(0), math.MaxFloat64
 	for i, x := range l {
-		dist := geoDist(x, p)
+		dist := GeoDist(x, p)
 		if dist < smallDist {
 			smallDist = dist
 			ix = i
@@ -124,14 +109,14 @@ func closest2(l []latlon, p latlon) []latlon {
 			ix2 = i
 		}
 	}
-	return []latlon{l[ix], l[ix2]}
+	return []LatLon{l[ix], l[ix2]}
 }
 
-func validHash3(a area, hash string) bool {
+func validHash(a *Area, hash string) bool {
 	box := geohash.BoundingBox(hash)
 	bclat, bclon := box.Center()
-	boxCenter := latlon{Lat: bclat, Lon: bclon}
-	bounds := []latlon{
+	boxCenter := LatLon{Lat: bclat, Lon: bclon}
+	bounds := []LatLon{
 		{Lat: box.MaxLat, Lon: box.MaxLng},
 		{Lat: box.MaxLat, Lon: box.MinLng},
 		{Lat: box.MinLat, Lon: box.MaxLng},
@@ -140,8 +125,8 @@ func validHash3(a area, hash string) bool {
 
 	twoClosest := closest2(a.Perim, boxCenter)
 	for _, b := range bounds {
-		valid := utils.Any(twoClosest, func(ll latlon) bool {
-			return geoDist(b, a.Center) < ll.RefDist
+		valid := utils.Any(twoClosest, func(ll LatLon) bool {
+			return GeoDist(b, a.Center) < ll.RefDist
 		})
 		if valid {
 			return true
@@ -150,9 +135,13 @@ func validHash3(a area, hash string) bool {
 	return false
 }
 
-func calcLayers2(a area) [][]string {
+func MakeGeohash(ll LatLon) string {
+	return geohash.EncodeWithPrecision(ll.Lat, ll.Lon, GeohashPrecision)
+}
+
+func CalcLayers(a *Area) [][]string {
 	clat, clon := a.Center.Lat, a.Center.Lon
-	centerHash := geohash.EncodeWithPrecision(clat, clon, precision)
+	centerHash := geohash.EncodeWithPrecision(clat, clon, GeohashPrecision)
 	layers := [][]string{{centerHash}}
 	flat := []string{centerHash}
 
@@ -162,7 +151,7 @@ func calcLayers2(a area) [][]string {
 		for _, e := range l {
 			nbs := geohash.Neighbors(e)
 			for _, nb := range nbs {
-				if !utils.Contains(nb, flat) && validHash3(a, nb) {
+				if !utils.Contains(nb, flat) && validHash(a, nb) {
 					flat = append(flat, nb)
 					curLayer = append(curLayer, nb)
 				}
@@ -205,72 +194,91 @@ func calcLayers2(a area) [][]string {
 
 }
 
-func calcLayers(a area) [][]string {
-	// center := a.Center(nil)
-	clat, clon := a.Center.Lat, a.Center.Lon
-	centerHash := geohash.EncodeWithPrecision(clat, clon, precision)
-	layers := [][]string{{centerHash}}
-	flat := []string{centerHash}
+// func calcLayers(a area) [][]string {
+// 	// center := a.Center(nil)
+// 	clat, clon := a.Center.Lat, a.Center.Lon
+// 	centerHash := geohash.EncodeWithPrecision(clat, clon, precision)
+// 	layers := [][]string{{centerHash}}
+// 	flat := []string{centerHash}
 
-	var getLayers func([]string) [][]string
-	getLayers = func(l []string) [][]string {
-		curLayer := make([]string, 0)
-		for _, e := range l {
-			nbs := geohash.Neighbors(e)
-			for _, nb := range nbs {
-				if !utils.Contains(nb, flat) && validHash3(a, nb) {
-					flat = append(flat, nb)
-					curLayer = append(curLayer, nb)
-				}
-			}
-		}
+// 	var getLayers func([]string) [][]string
+// 	getLayers = func(l []string) [][]string {
+// 		curLayer := make([]string, 0)
+// 		for _, e := range l {
+// 			nbs := geohash.Neighbors(e)
+// 			for _, nb := range nbs {
+// 				if !utils.Contains(nb, flat) && validHash3(a, nb) {
+// 					flat = append(flat, nb)
+// 					curLayer = append(curLayer, nb)
+// 				}
+// 			}
+// 		}
 
-		nValid := len(curLayer)
-		if nValid > 0 {
-			layers = append(layers, curLayer)
-		} else {
-			return layers
-		}
+// 		nValid := len(curLayer)
+// 		if nValid > 0 {
+// 			layers = append(layers, curLayer)
+// 		} else {
+// 			return layers
+// 		}
 
-		if nValid > len(l) {
-			return getLayers(curLayer)
-		} else {
-			return layers
-		}
+// 		if nValid > len(l) {
+// 			return getLayers(curLayer)
+// 		} else {
+// 			return layers
+// 		}
 
-	}
+// 	}
 
-	getLayers(layers[0])
+// 	getLayers(layers[0])
 
-	// required for firestore...
-	// mongoDb says pack of tens are also prefered
-	packOfTens, ilay := [][]string{{}}, int(0)
-	for _, ll := range layers {
-		for _, l := range ll {
-			if len(packOfTens[ilay]) < 10 {
-				packOfTens[ilay] = append(packOfTens[ilay], l)
-			} else {
-				packOfTens = append(packOfTens, []string{})
-				ilay++
-				packOfTens[ilay] = append(packOfTens[ilay], l)
-			}
-		}
-	}
+// 	// required for firestore...
+// 	// mongoDb says pack of tens are also prefered
+// 	packOfTens, ilay := [][]string{{}}, int(0)
+// 	for _, ll := range layers {
+// 		for _, l := range ll {
+// 			if len(packOfTens[ilay]) < 10 {
+// 				packOfTens[ilay] = append(packOfTens[ilay], l)
+// 			} else {
+// 				packOfTens = append(packOfTens, []string{})
+// 				ilay++
+// 				packOfTens[ilay] = append(packOfTens[ilay], l)
+// 			}
+// 		}
+// 	}
 
-	return packOfTens
+// 	return packOfTens
+// }
 
+type Area struct {
+	Center LatLon   `msgpack:"center" json:"center"`
+	Perim  []LatLon `msgpack:"perim" json:"perim"`
 }
 
-type area struct {
-	Center latlon   `msgpack:"center"`
-	Perim  []latlon `msgpack:"perim"`
+type BoostTest struct {
+	BoostId       string   `json:"boostId"`
+	Token         string   `json:"token"`
+	DeviceId      uint32   `json:"deviceId"`
+	SenderId      string   `json:"senderId"`
+	ChangeAddress string   `json:"changeAddr"`
+	S1            string   `json:"s1"`
+	PricePerHead  int      `json:"pph"`
+	InputSats     int      `json:"inputSats"`
+	PartialTx     string   `json:"tx"`
+	Limit         int      `json:"limit"`
+	MaxAge        int      `json:"maxAge"`
+	MinAge        int      `json:"minAge"`
+	Genders       []string `json:"genders"`
+	Interests     []string `json:"interests"`
+	Areas         []*Area  `json:"areas"`
+	BoostMessage  string   `json:"boostMessage"`
+	// FullMedia     []byte   `msgpack:"fullMedia"`
 }
 
-type boostRequest struct {
+type BoostRequest struct {
 	BoostId       string   `msgpack:"boostId"`
 	Token         string   `msgpack:"token"`
-	DeviceID      string   `msgpack:"deviceId"`
-	SenderID      string   `msgpack:"senderId"`
+	DeviceId      string   `msgpack:"deviceId"`
+	SenderId      string   `msgpack:"senderId"`
 	ChangeAddress []byte   `msgpack:"changeAddr"`
 	S1            []byte   `msgpack:"s1"`
 	PricePerHead  int      `msgpack:"pph"`
@@ -279,134 +287,206 @@ type boostRequest struct {
 	Limit         int      `msgpack:"limit"`
 	MaxAge        int      `msgpack:"maxAge"`
 	MinAge        int      `msgpack:"minAge"`
-	Genders       []string `msgpack:"genders"` // "male", "female", ""
+	Genders       []string `msgpack:"genders"`
 	Interests     []string `msgpack:"interests"`
-	Areas         []area   `msgpack:"areas"`
+	Areas         []*Area  `msgpack:"areas"`
 	BoostMessage  []byte   `msgpack:"boostMessage"`
 	FullMedia     []byte   `msgpack:"fullMedia"`
 	// Media         map[string]string      `msgpack:"boostMedia"`
 	// MediaPayload  []byte                 `msgpack:"mediaPayload"`
 }
 
-func (br *boostRequest) Query(layer []string, lim int) (cur *mongo.Cursor, err error) {
-	filter := bson.M{
-		"$and": bson.A{
-			bson.M{"age": bson.M{"$lte": br.MaxAge}},
-			bson.M{"age": bson.M{"$gte": br.MinAge}},
-			bson.M{"gender": bson.M{"$in": br.Genders}},
-			bson.M{"geohash": bson.M{"$in": layer}},
-			bson.M{"interests": bson.M{"$elemMatch": bson.M{"$in": br.Interests}}},
-		},
+func BoostQuery(layer, genders, interests []string,
+	lim, maxAge, minAge int) (cur *mongo.Cursor, err error) {
+	log.Printf(`
+ScanAreas:
+  layer:     %v
+  genders:   %v
+  interests: %v
+  limit:     %v
+  minAge:    %v
+  maxAge:    %v
+`, layer, genders, interests, lim, minAge, maxAge)
+
+	filter_ := bson.M{
+		"type":    "user",
+		"age":     bson.M{"$lte": maxAge, "$gte": minAge},
+		"geohash": bson.M{"$in": layer},
+	}
+	if len(genders) > 0 {
+		filter_["gender"] = bson.M{"$in": genders}
+	}
+	if len(interests) > 0 {
+		filter_["interests"] = bson.M{"$elemMatch": bson.M{"$in": interests}}
+	}
+	b, _ := json.MarshalIndent(filter_, "", "    ")
+	log.Println("query:\n", string(b))
+
+	// filter := bson.M{
+	// 	"$and": bson.A{
+	// 		bson.M{"type": "user"},
+	// 		bson.M{"age": bson.M{"$lte": maxAge}},
+	// 		bson.M{"age": bson.M{"$gte": minAge}},
+	// 		bson.M{"gender": bson.M{"$in": genders}},
+	// 		bson.M{"geohash": bson.M{"$in": layer}},
+	// 		bson.M{"interests": bson.M{"$elemMatch": bson.M{"$in": interests}}},
+	// 	},
+	// }
+	// opts := options.Find().SetLimit(int64(lim))
+	return db.Nodes.Find(context.Background(), filter_)
+	// return db.Nodes.Find(context.Background(), filter_, opts)
+}
+
+// func (br *BoostRequest) Query(layer []string, lim int) (cur *mongo.Cursor, err error) {
+// 	filter := bson.M{
+// 		"$and": bson.A{
+// 			bson.M{"type": "user"},
+// 			bson.M{"age": bson.M{"$lte": br.MaxAge}},
+// 			bson.M{"age": bson.M{"$gte": br.MinAge}},
+// 			bson.M{"gender": bson.M{"$in": br.Genders}},
+// 			bson.M{"geohash": bson.M{"$in": layer}},
+// 			bson.M{"interests": bson.M{"$elemMatch": bson.M{"$in": br.Interests}}},
+// 		},
+// 	}
+// 	opts := options.Find().SetLimit(int64(lim))
+// 	return db.Nodes.Find(context.Background(), filter, opts)
+// }
+
+type User struct {
+	Id           string   `bson:"_id"`
+	MainDeviceId uint32   `bson:"mainDeviceId"`
+	Interests    []string `bson:"interests"`
+	ChatPlaces   []uint16 `bson:"chatPlaces"`
+	Geohash      string   `bson:"geohash"`
+	Age          int      `bson:"age"`
+	Lat          float64  `bson:"latitude"`
+	Lon          float64  `bson:"longitude"`
+	Neuter       string   `bson:"neuter"`
+	// Place        string   `bson:"place"`
+	// Token        string   `bson:"token"`
+}
+
+func WriteBoosts(users map[uint16][]*User, interests []string, boostMessage, fullMedia []byte) {
+	ts := utils.MakeTimestamp()
+	relMediaplaces := make(map[uint16]uint16)
+	for p, _ := range users {
+		rm := utils.ChatRouter().RelativeMedias(p)
+		relMediaplaces[p] = rm[0]
+	}
+	mediaPlaces := make([]uint16, 0, len(relMediaplaces))
+	for _, mp := range relMediaplaces {
+		mediaPlaces, _ = utils.AddToSet(mp, mediaPlaces)
 	}
 
-	opts := options.Find().SetLimit(int64(lim))
-	return db.Users.Find(context.Background(), filter, opts)
-}
-
-type user struct {
-	Id           string  `bson:"_id"`
-	MainDeviceId string  `bson:"mainDeviceId"`
-	MediaId      string  `bson:"mediaId"`
-	Place        string  `bson:"place"`
-	Lat          float64 `bson:"latitude"`
-	Lon          float64 `bson:"longitude"`
-	Token        string  `bson:"token"`
-	Neuter       string  `bson:"neuter"`
-}
-
-var chat_server_router = map[string]string{}
-var media_server_router = map[string]string{}
-
-func writeBoosts(users map[string][]*user, mediaPlaces []string, br *boostRequest) {
-	writeTheMedia := func(mediaId, mediaPlace string, fullMedia []byte, ch chan error) {
-		ip := media_server_router[mediaPlace]
-		url := ip + "/media/" + mediaId + "/true"
+	// each write media compete with each other on memory, so can't be concurrent here
+	writeTheMedia := func(mediaPlace uint16, fullMedia []byte) error {
+		fm := flatgen.GetRootAsFullMedia(fullMedia, 0)
+		mt := fm.Metadata(nil)
+		ref := mt.Ref(nil)
+		utils.Assert(ref != nil, "boost media ref can't be null")
+		ref.MutatePlace(mediaPlace)
+		ref.MutatePermanent(false)
+		ref.MutateTimestamp(utils.MakeTimestamp())
+		refHex := hex.EncodeToString(utils.MakeRawMediaRef(ref))
+		ip := utils.MediaRouter().HostAndPort(mediaPlace)
+		url := "http://" + ip + "/media/" + refHex
 		ct := "application/octet-stream"
 		res, err := http.DefaultClient.Post(url, ct, bytes.NewReader(fullMedia))
+
 		if err != nil {
-			ch <- err
+			log.Println("WriteBoosts: writeTheMedia:", err)
+			return err
 		} else if res.StatusCode != 200 {
-			ch <- fmt.Errorf("Write media to place=%s failed with code=%d",
+			err = fmt.Errorf("Write media to place=%s failed with code=%d",
 				mediaPlace, res.StatusCode)
+			log.Println("WriteBoosts: writeTheMedia:", err)
+			return err
 		} else {
-			ch <- nil
+			return nil
 		}
 	}
 
-	writeTheBoosts := func(chatPlace string, usrs []*user, ch chan error) {
-		ip := chat_server_router[chatPlace]
+	// similarly, writeTheBoosts also compete on memory
+	writeTheBoosts := func(chatPlace uint16, usrs []*User) error {
+		ip := utils.ChatRouter().HostAndPort(chatPlace)
 		conn, err := net.Dial("tcp", ip)
 		if err != nil {
-			ch <- err
-			return
+			log.Printf("WriteBoost: WriteTheBoost: error dial tcp@%s: %v", ip, err)
+			return err
 		}
+
+		bm := flatgen.GetRootAsMessageEvent(boostMessage, 0)
+		if mr := bm.MediaRef(nil); mr != nil {
+			mr.MutatePlace(relMediaplaces[chatPlace])
+			mr.MutateTimestamp(ts)
+		}
+
 		defer conn.Close()
 		lenbuf := make([]byte, 2)
-		binary.BigEndian.PutUint16(lenbuf, uint16(len(br.BoostMessage)))
+		binary.BigEndian.PutUint16(lenbuf, uint16(len(boostMessage)))
 		_, err0 := conn.Write([]byte{0x88})
 		_, err1 := conn.Write(lenbuf)
-		_, err2 := conn.Write(br.BoostMessage)
+		_, err2 := conn.Write(boostMessage)
 		if err = errors.Join(err0, err1, err2); err != nil {
-			ch <- err
-			return
+			log.Println("WriteBoost: WriteTheBoost: error writing boostMsg:", err)
+			return err
 		}
 
-		makeBoostTag := func(bb *bytes.Buffer, u *user) []byte {
-			bb.WriteString("b-")
-			bb.WriteString(utils.MakeTimestampStr())
-			bb.WriteByte('-')
-			bb.WriteString(u.Id)
+		makeBoostTag := func(bb *bytes.Buffer, u *User) []byte {
+			bb.Reset()
+			bb.WriteByte(utils.KIND_BOOST)                            // 1
+			binary.Write(bb, binary.BigEndian, utils.MakeTimestamp()) // 8
+			hex.Decode(bb.AvailableBuffer(), []byte(u.Id))            // 13
+
+			// usrId, _ := hex.DecodeString(u.Id)
+			// bb.WriteString(u.Id)
+			// 22 +  ?
+			for _, x := range interests {
+				bb.WriteByte(byte(len(interests)))
+				bb.WriteString(x)
+			}
 			return bb.Bytes()
+			// bb.WriteString("b-")
+			// bb.WriteString(utils.MakeTimestampStr())
+			// bb.WriteByte('-')
+			// bb.WriteString(u.Id)
+			// return bb.Bytes()
 		}
 
-		bb := new(bytes.Buffer)
+		bb := bytes.NewBuffer(make([]byte, 0, 128))
 		for _, usr := range usrs {
 			boostTag := makeBoostTag(bb, usr)
 			binary.BigEndian.PutUint16(lenbuf, uint16(len(boostTag)))
 			_, err0 = conn.Write(lenbuf)
 			_, err1 = conn.Write(boostTag)
 			if err = errors.Join(err0, err1); err != nil {
-				ch <- err // TODO need actual error handling
-				return
+				log.Println("WriteBoosts: WriteTheBoost: err writing tag:", err)
+				return err
 			}
 		}
+		return nil
 	}
 
-	chatch := make(chan error, len(users))
-	for cp, usrs := range users {
-		go writeTheBoosts(cp, usrs, chatch)
-	}
-
-	mediach := make(chan error, len(mediaPlaces))
-	if len(br.FullMedia) > 0 {
-		mediach = make(chan error, len(mediaPlaces))
-		mm := flatgen.GetRootAsMediaMetadata(br.FullMedia, 2)
-		mid := utils.FastBytesToString(mm.TimeId())
-		for _, mp := range mediaPlaces {
-			go writeTheMedia(mid, mp, br.FullMedia, mediach)
-		}
-	}
-
-	var chlen int
-	if mediach == nil {
-		chlen = len(users)
-	} else {
-		chlen = len(users) + len(mediaPlaces)
-	}
-
-	for i := 0; i < chlen; i++ {
-		select {
-		case err := <-chatch:
-			if err != nil {
-				// TODO
-			}
-		case err := <-mediach:
-			if err != nil {
-				// TODO
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	go func() {
+		if fullMedia != nil && len(fullMedia) > 0 {
+			for _, mp := range mediaPlaces {
+				writeTheMedia(mp, fullMedia)
 			}
 		}
-	}
+		wg.Done()
+	}()
 
+	wg.Add(1)
+	go func() {
+		for cp, usrs := range users {
+			writeTheBoosts(cp, usrs)
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
 }
 
 func satsPrefix(sats int) string {
@@ -425,157 +505,47 @@ func satsPrefix(sats int) string {
 	return prfx
 }
 
-func HandleBoostRequest(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
-	var br boostRequest
-	if err := msgpack.NewDecoder(r.Body).Decode(&br); err != nil {
-		w.WriteHeader(500)
-		log.Println("HandleBoostRequest error decoding boostRequest:", err)
-		return
-	}
+func ScanArea(ctx context.Context, a *Area,
+	genders, interests []string, minAge, maxAge, lim int) (map[uint16][]*User, int) {
+	layers := CalcLayers(a)
+	// fmt.Printf("layers: %v\n", layers)
 
-	if br.PricePerHead > math.MaxUint32 {
-		w.WriteHeader(500)
-		log.Println("price per head exceeds maximun amount of 42 bsv:", br.PricePerHead)
-		return
-	}
-
-	tx := TxFromRdr(bytes.NewReader(br.PartialTx))
-	log.Println("tx pre boost:", tx.Formatted())
-
-	lim := br.Limit
-	// users := make([]*user, 0, lim)
-	musers := make(map[string][]*user)
-	mediaPlaces := make([]string, 0, 10)
-
-	for _, a := range br.Areas {
-		usrs, mp, newlim := scanArea(ctx, &br, a, lim)
-		utils.AddAllToSet(mediaPlaces, mp...)
-		for place, us := range usrs {
-			musers[place] = append(musers[place], us...)
-		}
-		// users = append(users, usrs...)
-		lim = newlim
-		if lim == 0 {
-			break
-		}
-	}
-
-	nOuts := br.Limit - lim
-	if nOuts == 0 {
-		log.Println("Haven't found any people to boost")
-		w.WriteHeader(500)
-		return
-	}
-
-	rdyTx := BoostScript(tx, br.S1, nOuts, br.PricePerHead, br.InputSats, br.ChangeAddress)
-	rawTx := rdyTx.Raw()
-	rawTxHex := hex.EncodeToString(rawTx) // txid := Txid(rawTx)
-	// txidHex := hex.EncodeToString(txid)
-	log.Printf("ready tx\n%v", rdyTx.Formatted())
-	// rawTxHex := hex.EncodeToString(rdyTx.Raw())
-	log.Printf("raw hex tx\n%v\n", rawTxHex)
-	// txHexRdr := strings.NewReader(rawTxHex)
-	txPayload := map[string]any{"txhex": rawTxHex}
-	// txPayload := map[string]interface{}{"rawTx": rawTxHex}
-	// txPayload := map[string]interface{}{"raw": rawTxHex}
-	rawPayload, err := json.Marshal(txPayload)
-	if err != nil {
-		log.Println("err marshalling txPayload:", err)
-		w.WriteHeader(500)
-		return
-	}
-	payloadRdr := bytes.NewReader(rawPayload)
-
-	// const url string = "https://test-api.bitails.io/tx/broadcast"
-	const url string = "https://api.whatsonchain.com/v1/bsv/test/tx/raw"
-	// const url string = "https://api.taal.com/api/v1/broadcast"
-	// req, err := http.NewRequest("POST", url, payloadRdr)
-	// req.Header = map[string][]string{
-	// 	"Content-Type": {"application/json"},
-	// 	"Authorization": {"Bearer " + taal_api_key},
-	// }
-	// rsp, err := http.DefaultClient.Do(req)
-
-	rsp, err := http.Post(url, "application/json", payloadRdr)
-	if err != nil {
-		w.WriteHeader(500)
-		log.Println("error making broadcast request:", err)
-		return
-	}
-
-	if rsp.StatusCode != 200 {
-		rbuf, _ := io.ReadAll(rsp.Body)
-		log.Println("error broadcasting tx:", string(rbuf))
-		w.WriteHeader(500)
-		return
-	}
-
-	var rjson map[string]any
-	err = json.NewDecoder(rsp.Body).Decode(&rjson)
-	if err != nil {
-		w.WriteHeader(500)
-		log.Println("error decoding response:", err)
-		return
-	}
-
-	status, ok := rjson["status"].(int)
-	if !ok {
-		log.Println("error finding response status")
-		w.WriteHeader(500)
-		return
-	}
-
-	if status != 200 {
-		title, detail := rjson["title"], rjson["detail"]
-		log.Println("%s\n%d\n%s\n", title, status, detail)
-		w.WriteHeader(500)
-		return
-	}
-
-	writeBoosts(musers, mediaPlaces, &br)
-
-	header, body := "Completed Boost", fmt.Sprintf("Found %v targets", nOuts)
-	if _, err = sendNotification(header, body, br.Token); err != nil {
-		log.Println("error pushing notification to booster:", err)
-	}
-}
-
-func scanArea(ctx context.Context,
-	b *boostRequest, a area, lim int) (map[string][]*user, []string, int) {
-	layers := calcLayers2(a)
-	fmt.Printf("layers: %v\n", layers)
-
-	// users := make([]*user, 0, lim)
-	musers := make(map[string][]*user)
-	mediaPlaces := make([]string, 0, 3)
-
+	musers := make(map[uint16][]*User)
 	var curlim int = lim
 
 	for _, layer := range layers {
 		la, li := layer, curlim
-		cursor, err := b.Query(la, li)
+		// b.Query(la, li)
+		cursor, err := BoostQuery(la, genders, interests, li, maxAge, minAge)
 		if err != nil {
 			log.Println("error making a query:", err)
 			continue
 		}
+
 		for cursor.Next(ctx) {
-			var usr user
+			var usr User
 			if err := bson.Unmarshal(cursor.Current, &usr); err != nil {
+				log.Println("ScanArea: error unmarshalling bson:", err)
 				break
 			}
+			if u, err := json.MarshalIndent(&usr, "", "    "); err != nil {
+				log.Println("ScanArea: error pretty user:", err)
+			} else {
+				log.Println(string(u))
+			}
 
-			cl2 := closest2(a.Perim, latlon{Lat: usr.Lat, Lon: usr.Lon})
-			usrDist := geoDist(latlon{Lat: usr.Lat, Lon: usr.Lon}, a.Center)
+			cl2 := closest2(a.Perim, LatLon{Lat: usr.Lat, Lon: usr.Lon})
+			usrDist := GeoDist(LatLon{Lat: usr.Lat, Lon: usr.Lon}, a.Center)
 
 			// check if the user is indeed within the area
 			// because someone can be in a geohash, but not the actual area
-			valid := utils.Any(cl2, func(ll latlon) bool { return usrDist <= ll.RefDist })
+			valid := utils.Any(cl2, func(ll LatLon) bool {
+				return usrDist <= ll.RefDist
+			})
 
 			if valid {
-				musers[usr.Place] = append(musers[usr.Place], &usr)
-				mp := utils.ExtractMediaPlace(usr.MediaId)
-				mediaPlaces = append(mediaPlaces, mp)
+				usrCp := usr.ChatPlaces[0]
+				musers[usrCp] = append(musers[usrCp], &usr)
 				curlim--
 				if curlim == 0 {
 					break
@@ -588,5 +558,5 @@ func scanArea(ctx context.Context,
 		}
 	}
 	fmt.Printf("we found %v users for the boost\n", lim-curlim)
-	return musers, mediaPlaces, curlim
+	return musers, curlim
 }

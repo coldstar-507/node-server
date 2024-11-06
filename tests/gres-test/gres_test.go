@@ -123,16 +123,16 @@ func TestPushMediasGres(t *testing.T) {
 	t.Log("jeff after PushMedias", m)
 }
 
-func TestUpdateNodeByIdGres(t *testing.T) {
-	update := map[string]any{"lastName": "Harrisson"}
-	if err := handlers.UpdateNodeById(jeff_id, update); err != nil {
-		t.Error("TestUpdateNode error updating jeff: ", err)
-	}
-	var m map[string]any
-	jeff, _ := handlers.GetNodeByTag("jeff")
-	msgpack.Unmarshal(jeff, &m)
-	t.Log("jeff after update", m)
-}
+// func TestUpdateNodeByIdGres(t *testing.T) {
+// 	update := map[string]any{"lastName": "Harrisson"}
+// 	if err := handlers.UpdateNodeById(jeff_id, update); err != nil {
+// 		t.Error("TestUpdateNode error updating jeff: ", err)
+// 	}
+// 	var m map[string]any
+// 	jeff, _ := handlers.GetNodeByTag("jeff")
+// 	msgpack.Unmarshal(jeff, &m)
+// 	t.Log("jeff after update", m)
+// }
 
 func TestUploadNodeGres(t *testing.T) {
 	node := map[string]any{

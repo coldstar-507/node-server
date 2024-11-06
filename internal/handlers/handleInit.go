@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"errors"
+
+	// "fmt"
 	"log"
 	"net/http"
 
@@ -12,6 +14,8 @@ import (
 
 	// "github.com/jackc/pgxutil"
 	"github.com/vmihailenco/msgpack/v5"
+	// "go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -27,26 +31,72 @@ import (
 // }
 
 func InitTransactionMongo(initValues map[string]any) error {
-	return db.Mongo.UseSession(context.Background(), func(sc mongo.SessionContext) error {
-		if err := sc.StartTransaction(); err != nil {
-			return err
-		} else if _, err = db.Tags.InsertOne(sc, initValues["tag"]); err != nil {
-			return err
-		} else if _, err = db.Nodes.InsertOne(sc, initValues["node"]); err != nil {
-			return err
-		} else if _, err = db.Users.InsertOne(sc, initValues["user"]); err != nil {
+	ctx := context.Background()
+	return db.Mongo.UseSession(ctx, func(sc mongo.SessionContext) error {
+		err := sc.StartTransaction()
+		if err != nil {
 			return err
 		}
+		_, err = db.Tags.InsertOne(sc, initValues["tag"])
+		if err != nil {
+			return err
+		}
+
+		_, err = db.Nodes.InsertOne(sc, initValues["node"])
+		if err != nil {
+			return err
+		}
+
+		_, err = db.Users.InsertOne(sc, initValues["user"])
+		if err != nil {
+			return err
+		}
+
+		return sc.CommitTransaction(context.Background())
+	})
+}
+
+func InitTransactionMongo2(initValues bson.Raw) error {
+	ctx := context.Background()
+	return db.Mongo.UseSession(ctx, func(sc mongo.SessionContext) error {
+		err := sc.StartTransaction()
+		if err != nil {
+			return err
+		}
+
+		tag := initValues.Lookup("node", "tag").StringValue()
+		_, err = db.Tags.InsertOne(sc, bson.M{"_id": tag})
+		if err != nil {
+			return err
+		}
+
+		_, err = db.Nodes.InsertOne(sc, initValues)
+		if err != nil {
+			return err
+		}
+
 		return sc.CommitTransaction(context.Background())
 	})
 }
 
 func InitTransaction(ctx context.Context, initValues map[string]any) error {
 	return pgx.BeginTxFunc(ctx, db.Pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		err0 := pgxutil.InsertRow(ctx, tx, "users", initValues["user"].(map[string]any))
-		err1 := pgxutil.InsertRow(ctx, tx, "nodes", initValues["node"].(map[string]any))
+		userValues := initValues["user"].(map[string]any)
+		nodeValues := initValues["node"].(map[string]any)
+		err0 := pgxutil.InsertRow(ctx, tx, "users", userValues)
+		err1 := pgxutil.InsertRow(ctx, tx, "nodes", nodeValues)
 		return errors.Join(err0, err1)
 	})
+}
+
+func HandleInit2(w http.ResponseWriter, r *http.Request) {
+	if raw, err := bson.ReadDocument(r.Body); err != nil {
+		log.Println("HandleInitMongo error reading init document:", err)
+		w.WriteHeader(500)
+	} else if err = InitTransactionMongo2(raw); err != nil {
+		log.Println("HandleInitMongo error making init tx:", err)
+		w.WriteHeader(501)
+	}
 }
 
 // user pre-encode to bson? -> no, msgpack or json that shit

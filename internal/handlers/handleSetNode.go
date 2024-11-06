@@ -16,16 +16,22 @@ func UploadNode(node map[string]any) error {
 	return pgxutil.InsertRow(context.Background(), db.Pool, "nodes", node)
 }
 
+func UploadMongoNode(node map[string]any) error {
+	_, err := db.Nodes.InsertOne(context.Background(), node)
+	return err
+}
+
 func UploadNodeMongo(node bson.Raw) error {
 	_, err := db.Nodes.InsertOne(context.Background(), node)
 	return err
 }
 
 func HandleUploadNode(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
 	if bson, err := bson.ReadDocument(r.Body); err != nil {
 		log.Println("HandleUploadNodeMongo error reading body:", err)
 		w.WriteHeader(500)
-	} else if _, err = db.Nodes.InsertOne(context.Background(), bson); err != nil {
+	} else if _, err = db.Nodes.InsertOne(ctx, bson); err != nil {
 		log.Println("HandleUploadNodeMongo error inserting node:", err)
 		w.WriteHeader(501)
 	}

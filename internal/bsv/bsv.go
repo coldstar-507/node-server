@@ -42,9 +42,10 @@ func p2pkh(pkh []byte, buf *bytes.Buffer) []byte {
 
 func BoostScript(t *Tx, s1 []byte, nout int, pph int, inSats int, addr []byte) *Tx {
 	// const bytes_per_sat float64 = 20
-	const bytes_per_sat float64 = 1000 // fees are len(tx.raw()) / 1000
-	const shp_out_size = 32            // 3 OPS, 20 data_bytes, 8 bytes for sats, 1 byte for len
-	const p2pkh_out_size = 34          // 5 OPS, 20 data_bytes, 8 bytes for sats, 1 byte for len
+	// fees are len(tx.raw()) / 1000
+	const bytes_per_sat float64 = 1000
+	const shp_out_size = 32   // 3 OPS, 20 data_bytes, 8 bytes for sats, 1 byte for len
+	const p2pkh_out_size = 34 // 5 OPS, 20 data_bytes, 8 bytes for sats, 1 byte for len
 
 	buf, h := new(bytes.Buffer), sha1.New()
 	outs := make([]*Txout, 0, nout+1)
@@ -58,10 +59,12 @@ func BoostScript(t *Tx, s1 []byte, nout int, pph int, inSats int, addr []byte) *
 		}
 		outs = append(outs, tout)
 	}
-
-	vout := makeVarInt(nout + 1)                                          // nout + change
-	outRelSize := (shp_out_size * nout) + p2pkh_out_size + len(vout.data) // size relating outs
-	txSize := len(t.Raw()) - 1 + outRelSize                               // -1 to remove varInt(0) vout
+	// nout + change
+	vout := makeVarInt(nout + 1)
+	// size relating outs
+	outRelSize := (shp_out_size * nout) + p2pkh_out_size + len(vout.data)
+	// -1 to remove varInt(0) vout
+	txSize := len(t.Raw()) - 1 + outRelSize
 
 	fees := int(math.Ceil(float64(txSize) / bytes_per_sat))
 	boostSats := pph * nout

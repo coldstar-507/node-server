@@ -4,18 +4,21 @@ go 1.22.1
 
 require (
 	firebase.google.com/go/v4 v4.14.1
-	github.com/coldstar-507/flatgen v0.0.0-00010101000000-000000000000
-	github.com/coldstar-507/utils v0.0.0-20240628170819-894d2f147162
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/jackc/pgxutil v0.0.0-20231015020832-ec5434149869
 	github.com/mmcloughlin/geohash v0.10.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	go.mongodb.org/mongo-driver v1.16.0
+	go.mongodb.org/mongo-driver v1.16.1
 	google.golang.org/api v0.170.0
 )
 
+require (
+	github.com/coldstar-507/flatgen v0.0.0-20240722151442-d6a80e1a5e55
+	github.com/coldstar-507/utils v0.0.0-20240716183536-9bcb8d2ad2c7
+)
+
 replace (
-	github.com/coldstar-507/flatgen => ../flatbufs/flatgen
+	github.com/coldstar-507/flatgen => ../../flatbufs/flatgen
 	github.com/coldstar-507/utils => ../utils
 )
 

@@ -2,16 +2,25 @@ package bsv
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"slices"
 )
+
+// var curv elliptic.Curve = elliptic.
 
 // Rules for encoding bsv transaction
 // 4 byte int (uint32) -> LITTLE ENDIAN // versionNo, nLockTime
 // 8 byte int (uint64) -> LITTLE ENDIAN // Satoshis
 // VarInt              -> BIG ENDIAN
+
+type Keys struct {
+	priv ecdsa.PrivateKey
+	pub  ecdsa.PublicKey
+}
 
 type Txin struct {
 	txid       []uint8
@@ -155,6 +164,12 @@ func (t *Tx) TxidHex() string {
 	return hex.EncodeToString(t.Txid())
 }
 
+func (t *Tx) TxidHexR() string {
+	txid := t.Txid()
+	slices.Reverse(txid)
+	return hex.EncodeToString(txid)
+}
+
 func varIntFromRdr(rdr *bytes.Reader) VarInt {
 	var uint uint64
 	firstByte, _ := rdr.ReadByte()
@@ -202,17 +217,35 @@ func makeVarInt(n int) VarInt {
 
 func (tin *Txin) Formatted() string {
 	txid, script := hex.EncodeToString(tin.txid), hex.EncodeToString(tin.script)
-	return fmt.Sprintf("==TXIN==\nutxoTxid=%v\nutxoIndex=%v\nscriptLen=%v\nscript=%v\nseqNo=%v\n====\n", txid, tin.utxoIndex, tin.scriptLen.uint, script, tin.sequenceNo)
+	return fmt.Sprintf(`
+==TXIN==
+utxoTxid : %v
+utxoIndex: %v
+scriptLen: %v
+script   : %v
+seqNo    : %v
+========
+`, txid, tin.utxoIndex, tin.scriptLen.uint, script, tin.sequenceNo)
 }
 
 func (tout *Txout) Formatted() string {
 	script := hex.EncodeToString(tout.script)
-	return fmt.Sprintf("==TXOUT==\nsats=%v\nscriptLen=%v\nscript=%v\n====\n", tout.sats, tout.scriptLen.uint, script)
+	return fmt.Sprintf(`
+==TXOUT==
+sats     : %v
+scriptLen: %v
+script   : %v
+=========
+`, tout.sats, tout.scriptLen.uint, script)
 }
 
 func (tx *Tx) Formatted() string {
 	buf := new(bytes.Buffer)
-	buf.WriteString(fmt.Sprintf("==TX==\nversionNo=%v\ninCount=%v\n", tx.versionNo, tx.nIns.uint))
+	buf.WriteString(fmt.Sprintf(`
+==TX==
+versionNo: %v
+inCount  : %v
+`, tx.versionNo, tx.nIns.uint))
 	for _, tin := range tx.txins {
 		buf.WriteString(tin.Formatted())
 	}

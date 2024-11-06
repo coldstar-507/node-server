@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func ValidUsernameMongo(username string) bool {
+func ValidTagMongo(username string) bool {
 	ctx, filter := context.Background(), bson.M{"_id": username}
 	if s := db.Tags.FindOne(ctx, filter); s.Err() == mongo.ErrNoDocuments {
 		return true
@@ -29,12 +29,10 @@ func ValidUsernamePostgres(username string) bool {
 	return valid
 }
 
-func HandleValidUsername(w http.ResponseWriter, r *http.Request) {
-	username := r.PathValue("username")
-	if ValidUsernameMongo(username) {
-		w.Write([]byte("true"))
-	} else {
-		w.Write([]byte("false"))
+func HandleValidTag(w http.ResponseWriter, r *http.Request) {
+	username := r.PathValue("tag")
+	if !ValidTagMongo(username) {
+		w.WriteHeader(204)
 	}
 }
 

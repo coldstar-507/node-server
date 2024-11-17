@@ -12,12 +12,18 @@ import (
 	"github.com/coldstar-507/node-server/internal/bsv"
 	"github.com/coldstar-507/node-server/internal/db"
 	"github.com/coldstar-507/node-server/internal/handlers"
+	"github.com/coldstar-507/router/router_utils"
+	"github.com/coldstar-507/utils/utils"
+
 	"go.mongodb.org/mongo-driver/bson"
 )
 
 func TestMain(m *testing.M) {
 	db.InitMongo()
 	defer db.ShutdownMongo()
+	mr := router_utils.FetchMetaRouter()
+	log.Println("TestMain(...): metaRouter:\n", utils.SprettyPrint(mr))
+	router_utils.SetMetaRouter(mr)
 	code := m.Run()
 	os.Exit(code)
 }
@@ -78,9 +84,9 @@ func TestBoost(t *testing.T) {
 		t.Error("TestBoost: error decoding boost message:", err)
 	}
 
-	bsv.WriteBoosts(musers, br.Interests, boostMsg, nil)
+	bsv.WriteBoosts(musers, br.Interests, boostMsg, nil, br.PricePerHead)
 
-	// not posting that tx yet, want to make sure WriteBoosts works
+	// not posting that tx yet, want to make sure WriteBoosts gworks
 	// if err := handlers.PostTx(rdyTx); err != nil {
 	// 	t.Error("TestBoost:", err)
 	// }

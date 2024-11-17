@@ -1,6 +1,6 @@
 module github.com/coldstar-507/node-server
 
-go 1.22.1
+go 1.23.2
 
 require (
 	firebase.google.com/go/v4 v4.14.1
@@ -8,18 +8,25 @@ require (
 	github.com/jackc/pgxutil v0.0.0-20231015020832-ec5434149869
 	github.com/mmcloughlin/geohash v0.10.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	go.mongodb.org/mongo-driver v1.16.1
+	go.mongodb.org/mongo-driver v1.17.1
 	google.golang.org/api v0.170.0
 )
 
 require (
-	github.com/coldstar-507/flatgen v0.0.0-20240722151442-d6a80e1a5e55
-	github.com/coldstar-507/utils v0.0.0-20240716183536-9bcb8d2ad2c7
+	github.com/coldstar-507/flatgen v0.0.0-20240830172816-703a5c6098f5
+	github.com/coldstar-507/router v0.0.0
+	// github.com/coldstar-507/utils v0.0.0-20241106185519-845eee7ad9d5
+	github.com/coldstar-507/utils/http_utils v0.0.0
+	github.com/coldstar-507/utils/id_utils v0.0.0
+	github.com/coldstar-507/utils/utils v0.0.0
 )
 
 replace (
 	github.com/coldstar-507/flatgen => ../../flatbufs/flatgen
-	github.com/coldstar-507/utils => ../utils
+	github.com/coldstar-507/router => ../router-server
+	github.com/coldstar-507/utils/http_utils => ../utils/http_utils
+	github.com/coldstar-507/utils/id_utils => ../utils/id_utils
+	github.com/coldstar-507/utils/utils => ../utils/utils
 )
 
 require (
@@ -31,7 +38,6 @@ require (
 	cloud.google.com/go/longrunning v0.5.5 // indirect
 	cloud.google.com/go/storage v1.40.0 // indirect
 	github.com/MicahParks/keyfunc v1.9.0 // indirect
-	github.com/btcsuite/btcd/btcutil v1.1.5 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -53,19 +59,19 @@ require (
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
-	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
 	go.opentelemetry.io/otel v1.24.0 // indirect
 	go.opentelemetry.io/otel/metric v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
-	golang.org/x/crypto v0.22.0 // indirect
+	golang.org/x/crypto v0.26.0 // indirect
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
-	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.19.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/sys v0.23.0 // indirect
+	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/appengine/v2 v2.0.2 // indirect

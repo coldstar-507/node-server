@@ -176,25 +176,26 @@ func varIntFromRdr(rdr *bytes.Reader) VarInt {
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.BigEndian, firstByte)
 
-	if firstByte == 0xFF {
+	switch firstByte {
+	case 0xFF:
 		var d uint64
 		binary.Read(rdr, binary.BigEndian, &d)
 		binary.Write(buf, binary.BigEndian, d)
 		uint = d
-	} else if firstByte == 0xFE {
+	case 0xFE:
 		var d uint32
 		binary.Read(rdr, binary.BigEndian, &d)
 		binary.Write(buf, binary.BigEndian, d)
 		uint = uint64(d)
-	} else if firstByte == 0xFD {
+	case 0xFD:
 		var d uint16
 		binary.Read(rdr, binary.BigEndian, &d)
 		binary.Write(buf, binary.BigEndian, d)
 		uint = uint64(d)
-	} else {
+	default:
 		uint = uint64(firstByte)
-	}
 
+	}
 	return VarInt{uint: uint, data: buf.Bytes()}
 }
 
@@ -241,18 +242,26 @@ script   : %v
 
 func (tx *Tx) Formatted() string {
 	buf := new(bytes.Buffer)
-	buf.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(buf, `
 ==TX==
 versionNo: %v
 inCount  : %v
-`, tx.versionNo, tx.nIns.uint))
+`, tx.versionNo, tx.nIns.uint)
+
+	// 	buf.WriteString(fmt.Sprintf(`
+	// ==TX==
+	// versionNo: %v
+	// inCount  : %v
+	// `, tx.versionNo, tx.nIns.uint))
 	for _, tin := range tx.txins {
 		buf.WriteString(tin.Formatted())
 	}
-	buf.WriteString(fmt.Sprintf("outCount=%v\n", tx.nOuts.uint))
+	fmt.Fprintf(buf, "outCOunt=%v\n", tx.nOuts.uint)
+	// buf.WriteString(fmt.Sprintf("outCount=%v\n", tx.nOuts.uint))
 	for _, tout := range tx.txouts {
 		buf.WriteString(tout.Formatted())
 	}
-	buf.WriteString(fmt.Sprintf("nLockTime=%v\n===========\n", tx.nLockTime))
+	fmt.Fprintf(buf, "nLockTime=%v\n===========\n", tx.nLockTime)
+	// buf.WriteString(fmt.Sprintf("nLockTime=%v\n===========\n", tx.nLockTime))
 	return buf.String()
 }

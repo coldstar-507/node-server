@@ -12,7 +12,7 @@ import (
 
 	// "down4.com/utils"
 	"github.com/coldstar-507/node-server/internal/db"
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/utils/utils"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	// "go.mongodb.org/mongo-driver/bson/primitive"
@@ -45,7 +45,9 @@ import (
 // 	}
 // }
 
-func AddToSetMongo(coll *mongo.Collection, field string, values []string, targets []string) error {
+func AddToSetMongo(coll *mongo.Collection,
+	field string, values []string, targets []string) error {
+
 	filter := bson.M{"_id": bson.M{"$in": targets}}
 	update := bson.M{"$addToSet": bson.M{field: bson.M{"$each": values}}}
 	_, err := coll.UpdateMany(context.Background(), filter, update)

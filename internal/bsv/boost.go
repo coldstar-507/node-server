@@ -18,7 +18,9 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"github.com/coldstar-507/flatgen"
 	"github.com/coldstar-507/node-server/internal/db"
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/router/router_utils"
+	"github.com/coldstar-507/utils/id_utils"
+	"github.com/coldstar-507/utils/utils"
 	"github.com/mmcloughlin/geohash"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -322,35 +324,10 @@ ScanAreas:
 	b, _ := json.MarshalIndent(filter_, "", "    ")
 	log.Println("query:\n", string(b))
 
-	// filter := bson.M{
-	// 	"$and": bson.A{
-	// 		bson.M{"type": "user"},
-	// 		bson.M{"age": bson.M{"$lte": maxAge}},
-	// 		bson.M{"age": bson.M{"$gte": minAge}},
-	// 		bson.M{"gender": bson.M{"$in": genders}},
-	// 		bson.M{"geohash": bson.M{"$in": layer}},
-	// 		bson.M{"interests": bson.M{"$elemMatch": bson.M{"$in": interests}}},
-	// 	},
-	// }
 	// opts := options.Find().SetLimit(int64(lim))
 	return db.Nodes.Find(context.Background(), filter_)
 	// return db.Nodes.Find(context.Background(), filter_, opts)
 }
-
-// func (br *BoostRequest) Query(layer []string, lim int) (cur *mongo.Cursor, err error) {
-// 	filter := bson.M{
-// 		"$and": bson.A{
-// 			bson.M{"type": "user"},
-// 			bson.M{"age": bson.M{"$lte": br.MaxAge}},
-// 			bson.M{"age": bson.M{"$gte": br.MinAge}},
-// 			bson.M{"gender": bson.M{"$in": br.Genders}},
-// 			bson.M{"geohash": bson.M{"$in": layer}},
-// 			bson.M{"interests": bson.M{"$elemMatch": bson.M{"$in": br.Interests}}},
-// 		},
-// 	}
-// 	opts := options.Find().SetLimit(int64(lim))
-// 	return db.Nodes.Find(context.Background(), filter, opts)
-// }
 
 type User struct {
 	Id           string   `bson:"_id"`
@@ -366,12 +343,14 @@ type User struct {
 	// Token        string   `bson:"token"`
 }
 
-func WriteBoosts(users map[uint16][]*User, interests []string, boostMessage, fullMedia []byte) {
+func WriteBoosts(users map[uint16][]*User,
+	interests []string, boostMessage, fullMedia []byte, pph int) {
+
 	ts := utils.MakeTimestamp()
 	relMediaplaces := make(map[uint16]uint16)
-	for p, _ := range users {
-		rm := utils.ChatRouter().RelativeMedias(p)
-		relMediaplaces[p] = rm[0]
+	for p := range users {
+		rm := router_utils.ChatRouter().RelativeMedias(router_utils.Uint16ToHex(p))
+		relMediaplaces[p] = router_utils.HexToUint16(rm[0])
 	}
 	mediaPlaces := make([]uint16, 0, len(relMediaplaces))
 	for _, mp := range relMediaplaces {
@@ -387,8 +366,9 @@ func WriteBoosts(users map[uint16][]*User, interests []string, boostMessage, ful
 		ref.MutatePlace(mediaPlace)
 		ref.MutatePermanent(false)
 		ref.MutateTimestamp(utils.MakeTimestamp())
-		refHex := hex.EncodeToString(utils.MakeRawMediaRef(ref))
-		ip := utils.MediaRouter().HostAndPort(mediaPlace)
+		refHex := hex.EncodeToString(id_utils.MakeRawMediaRef(ref))
+		hexMediaPlace := router_utils.Uint16ToHex(mediaPlace)
+		ip := router_utils.MediaRouter().HostAndPort(hexMediaPlace)
 		url := "http://" + ip + "/media/" + refHex
 		ct := "application/octet-stream"
 		res, err := http.DefaultClient.Post(url, ct, bytes.NewReader(fullMedia))
@@ -398,7 +378,7 @@ func WriteBoosts(users map[uint16][]*User, interests []string, boostMessage, ful
 			return err
 		} else if res.StatusCode != 200 {
 			err = fmt.Errorf("Write media to place=%s failed with code=%d",
-				mediaPlace, res.StatusCode)
+				hexMediaPlace, res.StatusCode)
 			log.Println("WriteBoosts: writeTheMedia:", err)
 			return err
 		} else {
@@ -408,12 +388,15 @@ func WriteBoosts(users map[uint16][]*User, interests []string, boostMessage, ful
 
 	// similarly, writeTheBoosts also compete on memory
 	writeTheBoosts := func(chatPlace uint16, usrs []*User) error {
-		ip := utils.ChatRouter().HostAndPort(chatPlace)
+		hexPlace := router_utils.Uint16ToHex(chatPlace)
+		ip := router_utils.ChatRouter().Host(hexPlace) + ":11003"
+		log.Printf("WriteBoost: writeTheBoost: dialing tcp@%s\n", ip)
 		conn, err := net.Dial("tcp", ip)
 		if err != nil {
-			log.Printf("WriteBoost: WriteTheBoost: error dial tcp@%s: %v", ip, err)
+			log.Printf("WriteBoost: writeTheBoost: error dial tcp@%s: %v", ip, err)
 			return err
 		}
+		defer conn.Close()
 
 		bm := flatgen.GetRootAsMessageEvent(boostMessage, 0)
 		if mr := bm.MediaRef(nil); mr != nil {
@@ -421,62 +404,111 @@ func WriteBoosts(users map[uint16][]*User, interests []string, boostMessage, ful
 			mr.MutateTimestamp(ts)
 		}
 
-		defer conn.Close()
-		lenbuf := make([]byte, 2)
-		binary.BigEndian.PutUint16(lenbuf, uint16(len(boostMessage)))
-		_, err0 := conn.Write([]byte{0x88})
-		_, err1 := conn.Write(lenbuf)
+		calcBoostTagLen := func() uint16 {
+			var l uint16 = 1 + 8 + 4 + 13
+			for _, x := range interests {
+				l += uint16(1 + len(x))
+			}
+			return l
+		}
+		boostTagLen := calcBoostTagLen()
+
+		err0 := binary.Write(conn, binary.BigEndian, byte(0x88))
+		err1 := binary.Write(conn, binary.BigEndian, uint16(len(boostMessage)))
 		_, err2 := conn.Write(boostMessage)
-		if err = errors.Join(err0, err1, err2); err != nil {
-			log.Println("WriteBoost: WriteTheBoost: error writing boostMsg:", err)
+		err3 := binary.Write(conn, binary.BigEndian, boostTagLen)
+		err4 := binary.Write(conn, binary.BigEndian, uint32(len(usrs)))
+		if err = errors.Join(err0, err1, err2, err3, err4); err != nil {
+			log.Println("WriteBoost: writeTheBoost: error writing boostMsg:", err)
 			return err
 		}
 
-		makeBoostTag := func(bb *bytes.Buffer, u *User) []byte {
-			bb.Reset()
-			bb.WriteByte(utils.KIND_BOOST)                            // 1
-			binary.Write(bb, binary.BigEndian, utils.MakeTimestamp()) // 8
-			hex.Decode(bb.AvailableBuffer(), []byte(u.Id))            // 13
+		log.Printf(`WriteBoost: writeTheBoost:
+t           : %x
+msgLen      : %d
+boostTagLen : %d
+nBoosts     : %d
+`, 0x88, len(boostMessage), boostTagLen, len(usrs))
 
-			// usrId, _ := hex.DecodeString(u.Id)
-			// bb.WriteString(u.Id)
-			// 22 +  ?
-			for _, x := range interests {
-				bb.WriteByte(byte(len(interests)))
-				bb.WriteString(x)
+		// boost tags from a specific boost have the same length
+		// {boost byte}|{boost ts}|{raw user nodeId}|( ... {len interest}|{interest} )
+
+		// makeBoostTag := func(bb *bytes.Buffer, u *User) []byte {
+		// 	bb.Reset()
+		// 	bb.WriteByte(id_utils.KIND_BOOST)                         // 1
+		// 	binary.Write(bb, binary.BigEndian, utils.MakeTimestamp()) // 8
+		// 	binary.Write(bb, binary.BigEndian, uint32(pph))           // 4
+		// 	log.Printf("WriteBoost: writeTheBoost: avail len=%d\n", bb.Available())
+		// 	log.Printf("WriteBoost: writeTheBoost: cap=%d\n", bb.Cap())
+		// 	hex.Decode(bb.AvailableBuffer(), []byte(u.Id)) // 13
+		// 	for _, x := range interests {
+		// 		bb.WriteByte(byte(len(interests)))
+		// 		bb.WriteString(x)
+		// 	}
+		// 	return bb.Bytes()
+		// }
+
+		// this slightly more convoluated way is prefered because
+		// there is no good way to decode hex into a writer without allocation
+		writeBoostTag := func(buf []byte, u *User) {
+			buf[0] = id_utils.KIND_BOOST                                       // 1
+			binary.BigEndian.PutUint64(buf[1:], uint64(utils.MakeTimestamp())) // 8
+			binary.BigEndian.PutUint32(buf[9:], uint32(pph))                   // 4
+			i, err := hex.Decode(buf[13:], []byte(u.Id))                       // 13
+			if err != nil {
+				panic(err)
+			} else if i != 13 {
+				panic("i != 13")
 			}
-			return bb.Bytes()
-			// bb.WriteString("b-")
-			// bb.WriteString(utils.MakeTimestampStr())
-			// bb.WriteByte('-')
-			// bb.WriteString(u.Id)
-			// return bb.Bytes()
+			var n = 26
+			for _, x := range interests {
+				l := len(x)
+				buf[n] = byte(l)
+				copy(buf[n+1:], []byte(x))
+				n += 1 + l
+			}
 		}
 
-		bb := bytes.NewBuffer(make([]byte, 0, 128))
+		log.Printf("WriteBoost: writeTheBoost: boostTagLen=%d\n", boostTagLen)
+
+		buf := make([]byte, boostTagLen)
+		// bb := bytes.NewBuffer(make([]byte, 0, boostTagLen))
 		for _, usr := range usrs {
-			boostTag := makeBoostTag(bb, usr)
-			binary.BigEndian.PutUint16(lenbuf, uint16(len(boostTag)))
-			_, err0 = conn.Write(lenbuf)
-			_, err1 = conn.Write(boostTag)
-			if err = errors.Join(err0, err1); err != nil {
-				log.Println("WriteBoosts: WriteTheBoost: err writing tag:", err)
+			writeBoostTag(buf, usr)
+			if _, err = conn.Write(buf); err != nil {
+				log.Println("WriteBoosts: writeTheBoost: err writing tag:", err)
 				return err
 			}
+			// if _, err = conn.Write(makeBoostTag(bb, usr)); err != nil {
+			// 	log.Println("WriteBoosts: writeTheBoost: err writing tag:", err)
+			// 	return err
+			// }
+		}
+
+		var r byte
+		if err := binary.Read(conn, binary.BigEndian, &r); err != nil {
+			log.Println("WriteBoosts: writeTheBoost: error reading completion:\n\t",
+				err)
+
+		} else if r == 0x88 {
+			log.Println("WriteBoosts: writeTheBoost: DONE")
+		} else {
+			log.Printf("WriteBoosts: writeTheBoost: wrong completion byte: %x\n", r)
 		}
 		return nil
 	}
 
 	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go func() {
-		if fullMedia != nil && len(fullMedia) > 0 {
+
+	if len(fullMedia) > 0 {
+		wg.Add(1)
+		go func() {
 			for _, mp := range mediaPlaces {
 				writeTheMedia(mp, fullMedia)
 			}
-		}
-		wg.Done()
-	}()
+			wg.Done()
+		}()
+	}
 
 	wg.Add(1)
 	go func() {
@@ -485,7 +517,6 @@ func WriteBoosts(users map[uint16][]*User, interests []string, boostMessage, ful
 		}
 		wg.Done()
 	}()
-
 	wg.Wait()
 }
 
@@ -507,15 +538,14 @@ func satsPrefix(sats int) string {
 
 func ScanArea(ctx context.Context, a *Area,
 	genders, interests []string, minAge, maxAge, lim int) (map[uint16][]*User, int) {
+
 	layers := CalcLayers(a)
-	// fmt.Printf("layers: %v\n", layers)
 
 	musers := make(map[uint16][]*User)
-	var curlim int = lim
+	var curlim = lim
 
 	for _, layer := range layers {
 		la, li := layer, curlim
-		// b.Query(la, li)
 		cursor, err := BoostQuery(la, genders, interests, li, maxAge, minAge)
 		if err != nil {
 			log.Println("error making a query:", err)

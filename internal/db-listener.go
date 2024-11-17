@@ -11,7 +11,8 @@ import (
 
 	"github.com/coldstar-507/node-server/internal/db"
 	"github.com/coldstar-507/node-server/internal/handlers"
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/utils/id_utils"
+	"github.com/coldstar-507/utils/utils"
 	"go.mongodb.org/mongo-driver/bson"
 
 	// "go.mongodb.org/mongo-driver/bson/bsonrw"
@@ -31,7 +32,7 @@ func MongoNodeListener() {
 	for stream.Next(ctx) {
 		val := stream.Current
 		strId := val.Lookup("documentKey", "_id").StringValue()
-		nodeId := utils.NodeId{}
+		nodeId := id_utils.NodeId{}
 		strRdr := strings.NewReader(strId)
 		if _, err := hex.NewDecoder(strRdr).Read(nodeId[:]); err != nil {
 			log.Println("MongoNodeListener: error reading hex id:", err)
@@ -39,12 +40,11 @@ func MongoNodeListener() {
 		}
 		fields := val.Lookup("updateDescription", "updatedFields")
 		log.Println("node updated fields:", fields.String())
-		l := utils.RAW_NODE_ID_LEN + len(fields.Value)
-		fullLen := 1 + 2 + l
+		fullLen := 1 + id_utils.RAW_NODE_ID_LEN + 2 + len(fields.Value)
 		buf := bytes.NewBuffer(make([]byte, 0, fullLen))
 		buf.WriteByte(handlers.UPDATE_PREFIX)
-		binary.Write(buf, binary.BigEndian, uint16(l))
 		buf.Write(nodeId[:])
+		binary.Write(buf, binary.BigEndian, uint16(len(fields.Value)))
 		buf.Write(fields.Value)
 		msg := &handlers.ConnMessage{Payload: buf.Bytes(), NodeId: &nodeId}
 		handlers.NodeConnMan.BroadcastUpdate <- msg
@@ -65,7 +65,7 @@ func MongoUserListener() {
 		log.Println("user updated fields:", fields.String())
 
 		strId := val.Lookup("documentKey", "_id").StringValue()
-		nodeId := utils.NodeId{}
+		nodeId := id_utils.NodeId{}
 		strRdr := strings.NewReader(strId)
 		if _, err := hex.NewDecoder(strRdr).Read(nodeId[:]); err != nil {
 			log.Println("MongoNodeListener: error reading hex id:", err)

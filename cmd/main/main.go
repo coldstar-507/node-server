@@ -7,13 +7,15 @@ import (
 	db_listener "github.com/coldstar-507/node-server/internal"
 	"github.com/coldstar-507/node-server/internal/db"
 	"github.com/coldstar-507/node-server/internal/handlers"
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/router/router_utils"
+	"github.com/coldstar-507/utils/http_utils"
+	"github.com/coldstar-507/utils/utils"
 )
 
 var (
-	ip    string            = "localhost"
-	st    utils.SERVER_TYPE = utils.NODE_ROUTER
-	place uint16            = 0x0000
+	ip         string                     = "localhost"
+	place      router_utils.SERVER_NUMBER = "0x0000"
+	routerType router_utils.ROUTER_TYPE   = router_utils.NODE_ROUTER
 )
 
 func main() {
@@ -29,13 +31,15 @@ func main() {
 	go handlers.StartUserConnServer()
 	go db_listener.MongoUserListener()
 
-	utils.InitLocalRouter(ip, st, place)
-	go utils.LocalRouter.Run()
+	router_utils.InitLocalServer(ip, place, routerType)
+	go router_utils.LocalServer.Run()
 	log.Println("LocalRouter is running")
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ping", utils.HandlePing)
-	mux.HandleFunc("GET /route-scores", utils.HandleScoreRequest)
+	mux.HandleFunc("GET /ping", router_utils.HandlePing)
+	mux.HandleFunc("GET /route-scores", router_utils.HandleScoreRequest)
+	mux.HandleFunc("GET /local-router", router_utils.HandleServerStatus)
+	mux.HandleFunc("GET /full-router", router_utils.HandleRouterStatus)
 
 	mux.HandleFunc("GET /valid-tag/{tag}", handlers.HandleValidTag)
 	mux.HandleFunc("POST /init", handlers.HandleInit)
@@ -70,10 +74,7 @@ func main() {
 	mux.HandleFunc("GET /node-connection/{id}/{iddev}", handlers.HandleNodeConnection)
 	mux.HandleFunc("GET /user-connection/{id}/{iddev}", handlers.HandleUserConnection)
 
-	server := utils.ApplyMiddlewares(mux,
-		utils.StatusLogger,
-		// utils.HttpLogging
-	)
+	server := http_utils.ApplyMiddlewares(mux, http_utils.StatusLogger)
 
 	addr := "0.0.0.0:8083"
 	log.Println("Starting http node-server on", addr)

@@ -12,7 +12,7 @@ import (
 	db_listener "github.com/coldstar-507/node-server/internal"
 	"github.com/coldstar-507/node-server/internal/db"
 	"github.com/coldstar-507/node-server/internal/handlers"
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/utils/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

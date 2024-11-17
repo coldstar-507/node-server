@@ -7,7 +7,8 @@ import (
 	"log"
 	"net"
 
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/utils/id_utils"
+	"github.com/coldstar-507/utils/utils"
 )
 
 func StartUserConnServer() {
@@ -27,7 +28,7 @@ func StartUserConnServer() {
 }
 
 type uman struct {
-	subs            map[utils.NodeId]map[utils.Dev]*uconn
+	subs            map[id_utils.NodeId]map[id_utils.Dev]*uconn
 	clean           chan *uconn
 	new             chan *uconn
 	BroadcastUpdate chan *ConnMessage
@@ -35,19 +36,20 @@ type uman struct {
 
 type uconn struct {
 	sess   int64
-	dev    *utils.Dev
-	nodeId *utils.NodeId
+	dev    *id_utils.Dev
+	nodeId *id_utils.NodeId
 	conn   net.Conn
 }
 
 var UserConnMan = &uman{
-	subs:            make(map[utils.NodeId]map[utils.Dev]*uconn),
+	subs:            make(map[id_utils.NodeId]map[id_utils.Dev]*uconn),
 	clean:           make(chan *uconn),
 	new:             make(chan *uconn),
 	BroadcastUpdate: make(chan *ConnMessage),
 }
 
-func readUserConnReq(r io.Reader, devBuf *utils.Dev, nodeIdBuf *utils.NodeId, ts *int64) error {
+func readUserConnReq(r io.Reader,
+	devBuf *id_utils.Dev, nodeIdBuf *id_utils.NodeId, ts *int64) error {
 	_, err := r.Read(devBuf[:])
 	if err != nil {
 		return err
@@ -93,7 +95,7 @@ func (m *uman) Run() {
 				n.dev[:], n.nodeId[:])
 			if x := m.subs[*n.nodeId]; x == nil {
 				log.Println("No map, creating it")
-				x = map[utils.Dev]*uconn{*n.dev: n}
+				x = map[id_utils.Dev]*uconn{*n.dev: n}
 				m.subs[*n.nodeId] = x
 			} else {
 				log.Println("Adding to map")
@@ -105,9 +107,10 @@ func (m *uman) Run() {
 }
 
 func handleUserConn(conn net.Conn) {
+	// TODO not currently using ts, might eventually remove it
 	var (
-		dev     = utils.Dev{}
-		nodeId  = utils.NodeId{}
+		dev     = id_utils.Dev{}
+		nodeId  = id_utils.NodeId{}
 		ts      int64
 		discBuf = make([]byte, 1)
 	)
@@ -119,7 +122,8 @@ func handleUserConn(conn net.Conn) {
 	}
 
 	strId := hex.EncodeToString(nodeId[:])
-	if newUser, _ := GetMongoUserByIdAfter(strId, ts); newUser != nil {
+	if newUser, _ := GetMongoUserById(strId); newUser != nil {
+		binary.Write(conn, binary.BigEndian, byte(0x10))
 		binary.Write(conn, binary.BigEndian, uint16(len(newUser)))
 		conn.Write(newUser)
 	}

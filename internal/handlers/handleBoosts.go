@@ -135,7 +135,7 @@ func HandleBoostRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// we then write the boosts on the chat servers
-	bsv.WriteBoosts(musers, br.Interests, br.BoostMessage, br.FullMedia)
+	bsv.WriteBoosts(musers, br.Interests, br.BoostMessage, br.FullMedia, br.PricePerHead)
 
 	header := "Completed Boost"
 	body := fmt.Sprintf("Found %v targets", nOuts)

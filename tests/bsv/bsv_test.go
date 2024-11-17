@@ -79,7 +79,8 @@ func TestScanArea(t *testing.T) {
 
 	bjsn, _ := json.MarshalIndent(&br, "", "    ")
 	fmt.Println("boost request:\n", string(bjsn))
-	u, n := bsv.ScanArea(context.Background(), br, a, lim)
+	u, n := bsv.ScanArea(context.Background(),
+		a, br.Genders, br.Interests, br.MinAge, br.MaxAge, lim)
 	fmt.Printf("found %d candidates\n", lim-n)
 	for p, usrs := range u {
 		fmt.Println("for place:", p)

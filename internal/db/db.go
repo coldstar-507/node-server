@@ -10,7 +10,7 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"google.golang.org/api/option"
 
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/utils/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"go.mongodb.org/mongo-driver/bson"

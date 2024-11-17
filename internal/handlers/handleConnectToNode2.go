@@ -8,7 +8,8 @@ import (
 	"log"
 	"net"
 
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/utils/id_utils"
+	"github.com/coldstar-507/utils/utils"
 )
 
 const UPDATE_PREFIX byte = 0x10
@@ -31,18 +32,18 @@ func StartNodeConnServer() {
 
 type ConnMessage struct {
 	Payload []byte
-	NodeId  *utils.NodeId
+	NodeId  *id_utils.NodeId
 }
 
 type man struct {
-	subs            map[utils.NodeId]map[utils.Iddev]*nconn
+	subs            map[id_utils.NodeId]map[id_utils.Iddev]*nconn
 	sub, unsub      chan *subreq
 	clean           chan *nconn
 	BroadcastUpdate chan *ConnMessage
 }
 
 var NodeConnMan = &man{
-	subs:            make(map[utils.NodeId]map[utils.Iddev]*nconn),
+	subs:            make(map[id_utils.NodeId]map[id_utils.Iddev]*nconn),
 	sub:             make(chan *subreq),
 	unsub:           make(chan *subreq),
 	clean:           make(chan *nconn),
@@ -51,18 +52,18 @@ var NodeConnMan = &man{
 
 type nconn struct {
 	sess  int64
-	iddev *utils.Iddev
+	iddev *id_utils.Iddev
 	conn  net.Conn
-	subs  []utils.NodeId
+	subs  []id_utils.NodeId
 	res   chan struct{}
 }
 
 type subreq struct {
-	nodeId *utils.NodeId
+	nodeId *id_utils.NodeId
 	nc     *nconn
 }
 
-func readReq(rdr io.Reader, connect *bool, buf *utils.NodeId, ts *int64) error {
+func readReq(rdr io.Reader, connect *bool, buf *id_utils.NodeId, ts *int64) error {
 	err0 := binary.Read(rdr, binary.BigEndian, connect)
 	_, err1 := rdr.Read(buf[:])
 	err2 := binary.Read(rdr, binary.BigEndian, ts)
@@ -75,9 +76,9 @@ func (nc *nconn) readFromConn() {
 
 	var (
 		connect bool
-		nodeId  = utils.NodeId{}
+		nodeId  = id_utils.NodeId{}
 		ts      int64
-		comp    = func(a *utils.NodeId, b utils.NodeId) bool { return *a == b }
+		comp    = func(a *id_utils.NodeId, b id_utils.NodeId) bool { return *a == b }
 	)
 
 	for {
@@ -96,6 +97,7 @@ func (nc *nconn) readFromConn() {
 				newNode, _ := GetMongoNodeByIdAfter(strId, ts)
 				if newNode != nil {
 					binary.Write(nc.conn, binary.BigEndian, UPDATE_PREFIX)
+					nc.conn.Write(nodeId[:])
 					l := uint16(len(newNode))
 					binary.Write(nc.conn, binary.BigEndian, l)
 					nc.conn.Write(newNode)
@@ -159,13 +161,13 @@ func (m *man) Run() {
 
 			if subs_ := m.subs[*sub.nodeId]; subs_ == nil {
 				log.Printf("creating sub group for nodeId=%x\n", sub.nodeId[:])
-				subs_ = make(map[utils.Iddev]*nconn)
+				subs_ = make(map[id_utils.Iddev]*nconn)
 				subs_[*sub.nc.iddev] = sub.nc
 				m.subs[*sub.nodeId] = subs_
 			} else if sub_ := subs_[*sub.nc.iddev]; sub_ != nil {
 				log.Println("already connected")
 				if sub_.sess < sub.nc.sess {
-					log.Println("cur sess:%d\nnew sess:%d\n",
+					log.Printf("cur sess:%d\nnew sess:%d\n",
 						sub_.sess, sub.nc.sess)
 					log.Println("replacing with newer conn")
 					// replace with new conn
@@ -208,7 +210,7 @@ func (m *man) Run() {
 }
 
 func handleNodeConn(conn net.Conn) {
-	iddev := utils.Iddev{}
+	iddev := id_utils.Iddev{}
 
 	if _, err := conn.Read(iddev[:]); err != nil {
 		log.Println("HandleNodeConn error reading iddev:", err)
@@ -222,7 +224,7 @@ func handleNodeConn(conn net.Conn) {
 		sess:  utils.MakeTimestamp(),
 		iddev: &iddev,
 		conn:  conn,
-		subs:  make([]utils.NodeId, 0, 5),
+		subs:  make([]id_utils.NodeId, 0, 5),
 		res:   make(chan struct{}),
 	}
 

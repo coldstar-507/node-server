@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/coldstar-507/flatgen"
 	"github.com/coldstar-507/node-server/internal/bsv"
 	"github.com/coldstar-507/node-server/internal/db"
 )
@@ -31,7 +32,7 @@ func TestMain(m *testing.M) {
 func fakeNode(tag string, age int, gender string, interests []string,
 	lat, lon float64) map[string]any {
 	id := tag + "_id"
-	geoh := bsv.MakeGeohash(bsv.LatLon{Lat: lat, Lon: lon})
+	geoh := bsv.MakeGeohash(&flatgen.LatLonT{Lat: lat, Lon: lon})
 	return map[string]any{
 		"_id":        id,
 		"type":       "user",
@@ -41,7 +42,7 @@ func fakeNode(tag string, age int, gender string, interests []string,
 		"longitude":  lon,
 		"geohash":    geoh,
 		"gender":     gender,
-		"chatPlaces": []uint16{0x1000},
+		"chatPlaces": []uint16{4000},
 		"interests":  interests,
 	}
 }

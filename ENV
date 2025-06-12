@@ -1,0 +1,16 @@
+export BOOSTS_KEY_FILE="$HOME/dev/down4/backend/node-server/cmd/scratch/test-keys"
+
+# those are objects that hold connections to nodes
+# which wait for broadcasts when nodes change
+# -- more managers means horizontal spread, less contentions for
+#    read and write locks that happens on connections, disconnections and broadcasts
+export N_NODE_MANAGERS=8
+
+# in a broadcast, each write to a connection has a go routine
+# this is the limit of simultaneous routine a manager can have
+# so the true limit of simlutaneous routine is N_NODE_MANAGER * N_SMEPAHOR
+export N_SEMAPHORE=10000
+
+echo boost key file  : $BOOSTS_KEY_FILE
+echo n node managers : $N_NODE_MANAGERS
+echo n semaphore     : $N_SEMAPHORE

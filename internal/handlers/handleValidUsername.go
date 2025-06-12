@@ -5,16 +5,16 @@ import (
 	"net/http"
 
 	"github.com/coldstar-507/node-server/internal/db"
-	"github.com/jackc/pgxutil"
+	// "github.com/jackc/pgxutil"
 
-	"github.com/jackc/pgx/v5"
+	// "github.com/jackc/pgx/v5"
 	// "github.com/jackc/pgxutil"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func ValidTagMongo(username string) bool {
-	ctx, filter := context.Background(), bson.M{"_id": username}
+func ValidTagMongo(tag string) bool {
+	ctx, filter := context.Background(), bson.M{"_id": tag}
 	if s := db.Tags.FindOne(ctx, filter); s.Err() == mongo.ErrNoDocuments {
 		return true
 	} else {
@@ -22,12 +22,12 @@ func ValidTagMongo(username string) bool {
 	}
 }
 
-func ValidUsernamePostgres(username string) bool {
-	sql := "SELECT NOT EXISTS(SELECT 1 FROM users WHERE tag = $1)"
-	valid, _ := pgxutil.SelectRow(context.Background(),
-		db.Pool, sql, []any{username}, pgx.RowTo[bool])
-	return valid
-}
+// func ValidUsernamePostgres(username string) bool {
+// 	sql := "SELECT NOT EXISTS(SELECT 1 FROM users WHERE tag = $1)"
+// 	valid, _ := pgxutil.SelectRow(context.Background(),
+// 		db.Pool, sql, []any{username}, pgx.RowTo[bool])
+// 	return valid
+// }
 
 func HandleValidTag(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("tag")

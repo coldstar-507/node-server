@@ -2,7 +2,7 @@ package test0
 
 import (
 	"context"
-	"encoding/json"
+	// "encoding/json"
 	"net/http/httptest"
 	"os"
 	"time"
@@ -31,7 +31,7 @@ import (
 func TestMain(m *testing.M) {
 	db.InitMongo()
 	defer db.ShutdownMongo()
-	go db_listener.MongoUserListener()
+	// go db_listener.MongoUserListener()
 	go db_listener.MongoNodeListener()
 	<-time.NewTimer(time.Second * 2).C
 	code := m.Run()
@@ -78,15 +78,15 @@ func TestInit(t *testing.T) {
 	}
 }
 
-func TestPushRoot(t *testing.T) {
-	root, userId := "test_root_0", "jeff_id"
-	err := handlers.PushRoot(root, []string{userId})
-	if err != nil {
-		t.Error(err)
-	}
-	raw, _ := handlers.GetMongoUserById("jeff_id")
-	t.Log(utils.SprettyPrint(raw))
-}
+// func TestPushRoot(t *testing.T) {
+// 	root, userId := "test_root_0", "jeff_id"
+// 	err := handlers.PushRoot(root, []string{userId})
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
+// 	raw, _ := handlers.GetMongoUserById("jeff_id")
+// 	t.Log(utils.SprettyPrint(raw))
+// }
 
 func TestValidUsername(t *testing.T) {
 	v0, v1 := handlers.ValidTagMongo("andrew"), handlers.ValidTagMongo("jeff")
@@ -117,15 +117,15 @@ func TestGetNodeById(t *testing.T) {
 	}
 }
 
-func TestPushMedias(t *testing.T) {
-	err := handlers.PushMediasToId("jeff_id", "images", []string{"image1", "image2"})
-	if err != nil {
-		t.Error("TestPushMedias error pushing medias to jeff: ", err)
-	}
+// func TestPushMedias(t *testing.T) {
+// 	err := handlers.PushMediasToId("jeff_id", "images", []string{"image1", "image2"})
+// 	if err != nil {
+// 		t.Error("TestPushMedias error pushing medias to jeff: ", err)
+// 	}
 
-	jeff, _ := handlers.GetMongoUserByTag("jeff")
-	t.Log("jeff after PushMedias\n", utils.SprettyPrint(jeff))
-}
+// 	jeff, _ := handlers.GetMongoUserByTag("jeff")
+// 	t.Log("jeff after PushMedias\n", utils.SprettyPrint(jeff))
+// }
 
 func TestCreateGroup(t *testing.T) {
 	group := map[string]any{
@@ -144,7 +144,7 @@ func TestCreateGroup(t *testing.T) {
 		t.Error(err)
 	}
 
-	jeff, _ := handlers.GetMongoUserByTag("jeff")
+	jeff, _ := handlers.GetMongoNodeByTag("jeff")
 	t.Log("jeff after group0_id was created\n", utils.SprettyPrint(jeff))
 
 }
@@ -169,18 +169,18 @@ func TestBasicReadAllNodes(t *testing.T) {
 	}
 }
 
-func TestBasicReadAllUsers(t *testing.T) {
-	t.Log("Reading all users")
-	cur, err := db.Users.Find(context.Background(), bson.D{})
-	if err != nil {
-		t.Error(err)
-	} else {
-		var a []map[string]any
-		cur.All(context.Background(), &a)
-		s, _ := json.MarshalIndent(a, "", "    ")
-		t.Log(string(s))
-	}
-}
+// func TestBasicReadAllUsers(t *testing.T) {
+// 	t.Log("Reading all users")
+// 	cur, err := db.Users.Find(context.Background(), bson.D{})
+// 	if err != nil {
+// 		t.Error(err)
+// 	} else {
+// 		var a []map[string]any
+// 		cur.All(context.Background(), &a)
+// 		s, _ := json.MarshalIndent(a, "", "    ")
+// 		t.Log(string(s))
+// 	}
+// }
 
 func TestBasicReadAllTags(t *testing.T) {
 	t.Log("Reading all tags")
@@ -199,5 +199,5 @@ func TestDelete(t *testing.T) {
 	tags := []string{"jeff", "big_fellas"}
 	db.Tags.DeleteMany(ctx, bson.M{"_id": bson.M{"$in": tags}})
 	db.Nodes.DeleteMany(ctx, bson.M{"tag": bson.M{"$in": tags}})
-	db.Users.DeleteMany(ctx, bson.M{"tag": bson.M{"$in": tags}})
+	// db.Users.DeleteMany(ctx, bson.M{"tag": bson.M{"$in": tags}})
 }

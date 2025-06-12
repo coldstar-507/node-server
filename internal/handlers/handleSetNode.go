@@ -6,15 +6,16 @@ import (
 	"net/http"
 
 	"github.com/coldstar-507/node-server/internal/db"
-	"github.com/jackc/pgxutil"
+	// "github.com/jackc/pgxutil"
+
 	// "github.com/jackc/pgxutil"
 	// "github.com/vmihailenco/msgpack/v5"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-func UploadNode(node map[string]any) error {
-	return pgxutil.InsertRow(context.Background(), db.Pool, "nodes", node)
-}
+// func UploadNode(node map[string]any) error {
+// 	return pgxutil.InsertRow(context.Background(), db.Pool, "nodes", node)
+// }
 
 func UploadMongoNode(node map[string]any) error {
 	_, err := db.Nodes.InsertOne(context.Background(), node)

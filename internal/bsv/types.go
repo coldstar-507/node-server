@@ -2,24 +2,152 @@ package bsv
 
 import (
 	"bytes"
-	"crypto/ecdsa"
+	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"slices"
+
+	"github.com/coldstar-507/utils/utils"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
-// var curv elliptic.Curve = elliptic.
+var curv = secp256k1.S256()
 
 // Rules for encoding bsv transaction
 // 4 byte int (uint32) -> LITTLE ENDIAN // versionNo, nLockTime
 // 8 byte int (uint64) -> LITTLE ENDIAN // Satoshis
 // VarInt              -> BIG ENDIAN
 
+var ProjectKeys *Keys = loadKeysFromEnv()
+
+func loadKeysFromEnv() *Keys {
+	fn, ok := os.LookupEnv("BOOSTS_KEY_FILE")
+	if !ok {
+		panic("ENV missing variable: BOOSTS_KEY_FILE")
+	}
+	f, err := os.Open(fn)
+	utils.Must(err)
+	kbuf := make([]byte, 256)
+	n, err := f.Read(kbuf)
+	utils.Must(err)
+	k, err := KeysFromJson(kbuf[:n])
+	utils.Must(err)
+	return k
+}
+
 type Keys struct {
-	priv ecdsa.PrivateKey
-	pub  ecdsa.PublicKey
+	Prv *secp256k1.PrivateKey
+	Pub *secp256k1.PublicKey
+	Cc  []byte
+}
+
+func NewKeys() (*Keys, error) {
+	cc := utils.RandomBytes(32)
+	priv, err := secp256k1.GeneratePrivateKey()
+	if err != nil {
+		return nil, err
+	}
+	return &Keys{Cc: cc, Prv: priv, Pub: priv.PubKey()}, nil
+}
+
+func (k *Keys) ToJson() map[string]any {
+	m := map[string]any{
+		"cc":  hex.EncodeToString(k.Cc),
+		"pub": hex.EncodeToString(k.Pub.SerializeCompressed()),
+	}
+	if k.Prv != nil {
+		m["prv"] = hex.EncodeToString(k.Prv.Serialize())
+	}
+	return m
+}
+
+func (k *Keys) ToJsonEncoded(pretty bool) []byte {
+	if pretty {
+		b, err := json.MarshalIndent(k.ToJson(), "", "    ")
+		utils.Must(err)
+		return b
+	} else {
+		b, err := json.Marshal(k.ToJson())
+		utils.Must(err)
+		return b
+	}
+}
+
+func KeysFromJson(j []byte) (*Keys, error) {
+	var m map[string]any
+	if err := json.Unmarshal(j, &m); err != nil {
+		return nil, err
+	}
+	ccHex, ok0 := m["cc"].(string)
+	pubHex, ok1 := m["pub"].(string)
+	if !ok0 || !ok1 {
+		return nil, fmt.Errorf("ccHex or pubHex isn't string")
+	}
+
+	cc, err0 := hex.DecodeString(ccHex)
+	rawPub, err1 := hex.DecodeString(pubHex)
+	if err := errors.Join(err0, err1); err != nil {
+		return nil, err
+	}
+
+	pub, err := secp256k1.ParsePubKey(rawPub)
+	if err != nil {
+		return nil, err
+	}
+
+	if hprv := m["prv"]; hprv != nil {
+		prvHex, ok2 := hprv.(string)
+		if !ok2 {
+			return nil, fmt.Errorf("prvHex isn't string")
+		}
+
+		rawPrv, err := hex.DecodeString(prvHex)
+		if err != nil {
+			return nil, err
+		}
+
+		prv := secp256k1.PrivKeyFromBytes(rawPrv)
+		return &Keys{Cc: cc, Pub: pub, Prv: prv}, nil
+	} else {
+		return &Keys{Cc: cc, Pub: pub}, nil
+	}
+}
+
+func (k *Keys) IsNeutered() bool {
+	return k.Prv == nil
+}
+
+func (k *Keys) Derive(secret []byte) *Keys {
+	hm := hmac.New(sha512.New, k.Cc)
+	ecpub := k.Pub.ToECDSA()
+	hm.Write(ecpub.X.Bytes())
+	hm.Write(ecpub.Y.Bytes())
+	hm.Write(secret)
+	out := hm.Sum(nil)
+	left, right := out[:32], out[32:64]
+	bigr := new(secp256k1.ModNScalar)
+	bigr.SetByteSlice(right)
+	var rJp, pubJp, newPubJp secp256k1.JacobianPoint
+	secp256k1.ScalarBaseMultNonConst(bigr, &rJp)
+	k.Pub.AsJacobian(&pubJp)
+	secp256k1.AddNonConst(&rJp, &pubJp, &newPubJp)
+
+	newPubJp.ToAffine()
+	newPub := secp256k1.NewPublicKey(&newPubJp.X, &newPubJp.Y)
+
+	if k.IsNeutered() {
+		return &Keys{Pub: newPub, Cc: left}
+	} else {
+		newSca := k.Prv.Key.Add(bigr)
+		newPriv := secp256k1.NewPrivateKey(newSca)
+		return &Keys{Pub: newPub, Prv: newPriv, Cc: left}
+	}
 }
 
 type Txin struct {
@@ -30,10 +158,18 @@ type Txin struct {
 	sequenceNo uint32
 }
 
+func (tin *Txin) Size() int {
+	return 32 + 4 + len(tin.scriptLen.data) + len(tin.script) + 4
+}
+
 type Txout struct {
 	sats      uint64
 	scriptLen VarInt
 	script    []uint8
+}
+
+func (tou *Txout) Size() int {
+	return 8 + len(tou.scriptLen.data) + len(tou.script)
 }
 
 type Tx struct {
@@ -41,6 +177,17 @@ type Tx struct {
 	nIns, nOuts          VarInt
 	txouts               []*Txout
 	txins                []*Txin
+}
+
+func (tx *Tx) Size() int {
+	var sum = 4 + 4 + len(tx.nIns.data) + len(tx.nOuts.data)
+	for _, tou := range tx.txouts {
+		sum += tou.Size()
+	}
+	for _, tin := range tx.txins {
+		sum += tin.Size()
+	}
+	return sum
 }
 
 type VarInt struct {
@@ -248,20 +395,13 @@ versionNo: %v
 inCount  : %v
 `, tx.versionNo, tx.nIns.uint)
 
-	// 	buf.WriteString(fmt.Sprintf(`
-	// ==TX==
-	// versionNo: %v
-	// inCount  : %v
-	// `, tx.versionNo, tx.nIns.uint))
 	for _, tin := range tx.txins {
 		buf.WriteString(tin.Formatted())
 	}
 	fmt.Fprintf(buf, "outCOunt=%v\n", tx.nOuts.uint)
-	// buf.WriteString(fmt.Sprintf("outCount=%v\n", tx.nOuts.uint))
 	for _, tout := range tx.txouts {
 		buf.WriteString(tout.Formatted())
 	}
 	fmt.Fprintf(buf, "nLockTime=%v\n===========\n", tx.nLockTime)
-	// buf.WriteString(fmt.Sprintf("nLockTime=%v\n===========\n", tx.nLockTime))
 	return buf.String()
 }

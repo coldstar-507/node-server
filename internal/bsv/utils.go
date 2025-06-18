@@ -5,7 +5,7 @@ import (
 	"hash"
 	"io"
 
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 	// "golang.org/x/crypto/ripemd160"
 )
 
@@ -27,7 +27,7 @@ func RawAdressw(w io.Writer, pubKey []byte, sh256, rm hash.Hash, sum []byte) {
 	sh256.Write(pubKey)
 	sum = sh256.Sum(sum)
 	rm.Write(sum)
-	utils.WriteBin(w, rm.Sum(sum[:0]))
+	utils2.WriteBin(w, rm.Sum(sum[:0]))
 }
 
 func MakeRawAdress(pubKey []byte, sh256, rm hash.Hash, sum []byte) [20]byte {
@@ -39,7 +39,7 @@ func MakeRawAdress(pubKey []byte, sh256, rm hash.Hash, sum []byte) [20]byte {
 
 func MakeSecret(s1 []byte, ix uint32, h hash.Hash) []byte {
 	h.Reset()
-	utils.WriteBin(h, ix, s1)
+	utils2.WriteBin(h, ix, s1)
 	return h.Sum(nil)
 }
 

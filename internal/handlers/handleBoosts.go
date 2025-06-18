@@ -15,7 +15,7 @@ import (
 
 	fg "github.com/coldstar-507/flatgen"
 	"github.com/coldstar-507/node-server/internal/bsv"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 	"go.mongodb.org/mongo-driver/bson"
 	// "github.com/vmihailenco/msgpack/v5"
 )
@@ -151,15 +151,15 @@ func deleteTemp(temp *os.File) {
 }
 
 func HandleBoostRequest(w http.ResponseWriter, r *http.Request) {
-	ln := utils.Pln("HandleBoostRequest:")
+	ln := utils2.Pln("HandleBoostRequest:")
 	var (
 		ctx    = context.Background()
 		reqLen uint16
 		req    []byte
 	)
-	utils.ReadBin(r.Body, &reqLen)
+	utils2.ReadBin(r.Body, &reqLen)
 	req = make([]byte, reqLen)
-	utils.ReadBin(r.Body, &req)
+	utils2.ReadBin(r.Body, &req)
 	boostReq := fg.GetRootAsBoostRequest(req, 0)
 	var ch chan *os.File
 	if boostReq.MediaLength() > 0 {
@@ -181,7 +181,7 @@ func HandleBoostRequest(w http.ResponseWriter, r *http.Request) {
 	} else {
 		musers, nOuts = SimpleQ(ctx, bq)
 	}
-	// musers, nOuts := utils.If(len(bq.Areas) > 0, ScanAreas(ctx, bq), SimpleQ(ctx, bq))
+	// musers, nOuts := utils2.If(len(bq.Areas) > 0, ScanAreas(ctx, bq), SimpleQ(ctx, bq))
 	if nOuts == 0 {
 		ln("Haven't found any people to boost")
 		w.WriteHeader(501)

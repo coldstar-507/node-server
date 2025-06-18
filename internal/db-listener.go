@@ -10,8 +10,9 @@ import (
 
 	"github.com/coldstar-507/node-server/internal/db"
 	"github.com/coldstar-507/node-server/internal/handlers"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
+	// "github.com/coldstar-507/utils/id_utils"
+	// "github.com/coldstar-507/utils/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -25,12 +26,12 @@ func MongoNodeListener() {
 		// 	Value: bson.M{"$exists": false}},
 	}})
 
-	utils.Must(err)
+	utils2.Must(err)
 	defer stream.Close(ctx)
 	for stream.Next(ctx) {
 		val := stream.Current
 		strId := val.Lookup("documentKey", "_id").StringValue()
-		nodeId := id_utils.NodeId{}
+		nodeId := utils2.NodeId{}
 		strRdr := strings.NewReader(strId)
 		if _, err := hex.NewDecoder(strRdr).Read(nodeId[:]); err != nil {
 			log.Println("MongoNodeListener: error reading hex id:", err)
@@ -38,7 +39,7 @@ func MongoNodeListener() {
 		}
 		fields := val.Lookup("updateDescription", "updatedFields")
 		log.Println("node updated fields:", fields.String())
-		fullLen := 1 + id_utils.RAW_NODE_ID_LEN + 2 + len(fields.Value)
+		fullLen := 1 + utils2.RAW_NODE_ID_LEN + 2 + len(fields.Value)
 		buf := bytes.NewBuffer(make([]byte, 0, fullLen))
 		buf.WriteByte(handlers.UPDATE_PREFIX)
 		buf.Write(nodeId[:])
@@ -59,7 +60,7 @@ func MongoNodeListener() {
 // 		{Key: "$match", Value: bson.M{"operationType": "update"}},
 // 	}})
 
-// 	utils.Must(err)
+// 	utils2.Must(err)
 // 	defer stream.Close(ctx)
 // 	for stream.Next(ctx) {
 // 		val := stream.Current
@@ -67,7 +68,7 @@ func MongoNodeListener() {
 // 		log.Println("user updated fields:", fields.String())
 
 // 		strId := val.Lookup("documentKey", "_id").StringValue()
-// 		nodeId := id_utils.NodeId{}
+// 		nodeId := utils2.NodeId{}
 // 		strRdr := strings.NewReader(strId)
 // 		if _, err := hex.NewDecoder(strRdr).Read(nodeId[:]); err != nil {
 // 			log.Println("MongoNodeListener: error reading hex id:", err)
@@ -87,14 +88,14 @@ func MongoNodeListener() {
 
 // func NodeListener() {
 // 	poolconn, err := db.Pool.Acquire(context.Background())
-// 	utils.Must(err)
+// 	utils2.Must(err)
 // 	conn := poolconn.Hijack()
 // 	defer conn.Close(context.Background())
 // 	_, err = conn.Exec(context.Background(), "LISTEN node_changes")
-// 	utils.Must(err)
+// 	utils2.Must(err)
 // 	for {
 // 		ntf, err := conn.WaitForNotification(context.Background())
-// 		utils.NonFatal(err, "NodeListener notification error")
+// 		utils2.NonFatal(err, "NodeListener notification error")
 // 		if node, err := handlers.GetNodeById(ntf.Payload); err != nil {
 // 			log.Printf("NodeListener error getting node id=%s, %v\n",
 // 				ntf.Payload, err)
@@ -111,14 +112,14 @@ func MongoNodeListener() {
 
 // func UserListener() {
 // 	poolconn, err := db.Pool.Acquire(context.Background())
-// 	utils.Must(err)
+// 	utils2.Must(err)
 // 	conn := poolconn.Hijack()
 // 	defer conn.Close(context.Background())
 // 	_, err = conn.Exec(context.Background(), "LISTEN user_changes")
-// 	utils.Must(err)
+// 	utils2.Must(err)
 // 	for {
 // 		ntf, err := conn.WaitForNotification(context.Background())
-// 		utils.NonFatal(err, "UserListener notification error")
+// 		utils2.NonFatal(err, "UserListener notification error")
 // 		if node, err := handlers.GetNodeById(ntf.Payload); err != nil {
 // 			log.Printf("UserListener error getting node id=%s, %v\n",
 // 				ntf.Payload, err)

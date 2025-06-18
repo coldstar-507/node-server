@@ -9,7 +9,7 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"google.golang.org/api/option"
 
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 	// "github.com/jackc/pgx/v5/pgxpool"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -34,9 +34,9 @@ func InitFirebaseMessager() {
 	servAcc := os.Getenv("FIREBASE_CONFIG")
 	opt := option.WithCredentialsFile(servAcc)
 	app, err := firebase.NewApp(context.Background(), nil, opt)
-	utils.Fatal(err, "InitFirebaseMessager error creating firebase app")
+	utils2.Fatal(err, "InitFirebaseMessager error creating firebase app")
 	Messager, err = app.Messaging(context.Background())
-	utils.Fatal(err, "InitFirebaseMessager error creating firebase messager")
+	utils2.Fatal(err, "InitFirebaseMessager error creating firebase messager")
 }
 
 // uri := "mongodb://172.18.0.2:27017,172.18.0.3:27017/?replicatSet=mongo-replicas"
@@ -49,7 +49,7 @@ func InitMongo() {
 		ApplyURI(uri)
 
 	Mongo, err = mongo.Connect(context.TODO(), opt)
-	utils.Must(err)
+	utils2.Must(err)
 	dbOne = Mongo.Database("one")
 	Nodes = dbOne.Collection("nodes")
 	// Users = dbOne.Collection("users")

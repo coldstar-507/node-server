@@ -10,15 +10,15 @@ import (
 	"math"
 
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 	"golang.org/x/crypto/ripemd160"
 )
 
 func shpw(w io.Writer, s1 []byte, i uint32, h hash.Hash) {
 	h.Reset()
-	utils.WriteBin(h, s1, i)
+	utils2.WriteBin(h, s1, i)
 	s2 := h.Sum(nil)
-	utils.WriteBin(w, op_sha1, op_push_data(s2), op_equal)
+	utils2.WriteBin(w, op_sha1, op_push_data(s2), op_equal)
 }
 
 func makeShp(s1 []byte, i uint32, h hash.Hash) [23]byte {
@@ -29,7 +29,7 @@ func makeShp(s1 []byte, i uint32, h hash.Hash) [23]byte {
 }
 
 func p2pkhw(w io.Writer, addr []byte) {
-	utils.WriteBin(w,
+	utils2.WriteBin(w,
 		op_dup,
 		op_hash160,
 		op_push_data(addr),
@@ -120,9 +120,9 @@ func BoostScript(t *Tx, br *flatgen.BoostRequest, nout int) *Tx {
 	fees := int(math.Ceil(float64(txSize) / bytes_per_sat))
 	boostSats := int(br.PricePerHead()) * nout
 	change := int(br.InputSats()) - (boostSats + fees)
-	utils.Assert(change > 0, "BoostScript: change=%d must be > 0", change)
+	utils2.Assert(change > 0, "BoostScript: change=%d must be > 0", change)
 	changeAddr := br.ChangeAddressBytes()
-	utils.Assert(len(changeAddr) == 20, "BoostScript: invalid address: %x", changeAddr)
+	utils2.Assert(len(changeAddr) == 20, "BoostScript: invalid address: %x", changeAddr)
 
 	outs := make([]*Txout, 0, nout+1)
 	changeScript := p2pkh(changeAddr)

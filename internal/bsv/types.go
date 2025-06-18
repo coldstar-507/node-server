@@ -13,7 +13,7 @@ import (
 	"os"
 	"slices"
 
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
@@ -32,12 +32,12 @@ func loadKeysFromEnv() *Keys {
 		panic("ENV missing variable: BOOSTS_KEY_FILE")
 	}
 	f, err := os.Open(fn)
-	utils.Must(err)
+	utils2.Must(err)
 	kbuf := make([]byte, 256)
 	n, err := f.Read(kbuf)
-	utils.Must(err)
+	utils2.Must(err)
 	k, err := KeysFromJson(kbuf[:n])
-	utils.Must(err)
+	utils2.Must(err)
 	return k
 }
 
@@ -48,7 +48,7 @@ type Keys struct {
 }
 
 func NewKeys() (*Keys, error) {
-	cc := utils.RandomBytes(32)
+	cc := utils2.RandomBytes(32)
 	priv, err := secp256k1.GeneratePrivateKey()
 	if err != nil {
 		return nil, err
@@ -70,11 +70,11 @@ func (k *Keys) ToJson() map[string]any {
 func (k *Keys) ToJsonEncoded(pretty bool) []byte {
 	if pretty {
 		b, err := json.MarshalIndent(k.ToJson(), "", "    ")
-		utils.Must(err)
+		utils2.Must(err)
 		return b
 	} else {
 		b, err := json.Marshal(k.ToJson())
-		utils.Must(err)
+		utils2.Must(err)
 		return b
 	}
 }

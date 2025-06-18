@@ -12,7 +12,7 @@ import (
 	db_listener "github.com/coldstar-507/node-server/internal"
 	"github.com/coldstar-507/node-server/internal/db"
 	"github.com/coldstar-507/node-server/internal/handlers"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -105,7 +105,7 @@ func TestGetNodeByTag(t *testing.T) {
 	if raw, err := handlers.GetMongoNodeByTag("jeff"); err != nil {
 		t.Error(err)
 	} else {
-		t.Log(utils.SprettyPrint(raw))
+		t.Log(utils2.SprettyPrint(raw))
 	}
 }
 
@@ -113,7 +113,7 @@ func TestGetNodeById(t *testing.T) {
 	if raw, err := handlers.GetMongoNodeById("jeff_id"); err != nil {
 		t.Error(err)
 	} else {
-		t.Log(utils.SprettyPrint(raw))
+		t.Log(utils2.SprettyPrint(raw))
 	}
 }
 
@@ -124,7 +124,7 @@ func TestGetNodeById(t *testing.T) {
 // 	}
 
 // 	jeff, _ := handlers.GetMongoUserByTag("jeff")
-// 	t.Log("jeff after PushMedias\n", utils.SprettyPrint(jeff))
+// 	t.Log("jeff after PushMedias\n", utils2.SprettyPrint(jeff))
 // }
 
 func TestCreateGroup(t *testing.T) {
@@ -145,7 +145,7 @@ func TestCreateGroup(t *testing.T) {
 	}
 
 	jeff, _ := handlers.GetMongoNodeByTag("jeff")
-	t.Log("jeff after group0_id was created\n", utils.SprettyPrint(jeff))
+	t.Log("jeff after group0_id was created\n", utils2.SprettyPrint(jeff))
 
 }
 
@@ -153,7 +153,7 @@ func TestAddUsersToGroup(t *testing.T) {
 	newMembers := []string{"jeff_id", "andrew_id", "scott_id", "helene_id", "david_id"}
 	handlers.AddToGroup("group0_id", newMembers)
 	abc, _ := handlers.GetMongoNodeByTag("big_fellas")
-	t.Log("big_fellas after update\n", utils.SprettyPrint(abc))
+	t.Log("big_fellas after update\n", utils2.SprettyPrint(abc))
 }
 
 // ////////////////////////////////
@@ -165,7 +165,7 @@ func TestBasicReadAllNodes(t *testing.T) {
 	} else {
 		var a []map[string]any
 		cur.All(context.Background(), &a)
-		t.Log(utils.SprettyPrint(a))
+		t.Log(utils2.SprettyPrint(a))
 	}
 }
 
@@ -190,7 +190,7 @@ func TestBasicReadAllTags(t *testing.T) {
 	} else {
 		var a []map[string]any
 		cur.All(context.Background(), &a)
-		t.Log(utils.SprettyPrint(a))
+		t.Log(utils2.SprettyPrint(a))
 	}
 }
 

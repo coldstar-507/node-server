@@ -13,8 +13,9 @@ import (
 	"github.com/coldstar-507/node-server/internal/bsv"
 	"github.com/coldstar-507/node-server/internal/db"
 	"github.com/coldstar-507/node-server/internal/handlers"
-	"github.com/coldstar-507/router/router_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/router-server/router_utils"
+	"github.com/coldstar-507/utils2"
+	// "github.com/coldstar-507/utils/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -23,14 +24,14 @@ func TestMain(m *testing.M) {
 	db.InitMongo()
 	defer db.ShutdownMongo()
 	mr := router_utils.FetchMetaRouter()
-	log.Println("TestMain(...): metaRouter:\n", utils.SprettyPrint(mr))
+	log.Println("TestMain(...): metaRouter:\n", utils2.SprettyPrint(mr))
 	router_utils.SetMetaRouter(mr)
 	code := m.Run()
 	os.Exit(code)
 }
 
 func TestBoost(t *testing.T) {
-	ln, f := utils.Pln("TestBoost:"), utils.Pf("TestBoost: ")
+	ln, f := utils2.Pln("TestBoost:"), utils2.Pf("TestBoost: ")
 	ctx := context.Background()
 
 	b, err := os.ReadFile("flatNoMedia")

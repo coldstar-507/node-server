@@ -7,9 +7,11 @@ import (
 	db_listener "github.com/coldstar-507/node-server/internal"
 	"github.com/coldstar-507/node-server/internal/db"
 	"github.com/coldstar-507/node-server/internal/handlers"
-	"github.com/coldstar-507/router/router_utils"
-	"github.com/coldstar-507/utils/http_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/router-server/router_utils"
+	"github.com/coldstar-507/utils2"
+	// "github.com/coldstar-507/router/router_utils"
+	// "github.com/coldstar-507/utils/http_utils"
+	// "github.com/coldstar-507/utils/utils"
 )
 
 var (
@@ -90,10 +92,10 @@ func main() {
 
 	// handlers.DeleteAllAccounts()
 
-	server := http_utils.ApplyMiddlewares(mux, http_utils.StatusLogger)
+	server := utils2.ApplyMiddlewares(mux, utils2.StatusLogger)
 
 	addr := "0.0.0.0:8083"
 	log.Println("Starting http node-server on", addr)
 	err := http.ListenAndServe(addr, server)
-	utils.NonFatal(err, "ERROR http.ListenAndServe error")
+	utils2.NonFatal(err, "ERROR http.ListenAndServe error")
 }

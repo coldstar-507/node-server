@@ -11,19 +11,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
+	// "github.com/coldstar-507/utils/utils"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-type iddev = id_utils.Iddev_
-type nodeid = id_utils.NodeId
+type iddev = utils2.Iddev_
+type nodeid = utils2.NodeId
 
 type conns = map[iddev]*nconn3
 type nodes = map[nodeid]*sconns
 
-type sconns = utils.Smap[iddev, *nconn3]
-type snodes = utils.Smap[nodeid, *sconns]
+type sconns = utils2.Smap[iddev, *nconn3]
+type snodes = utils2.Smap[nodeid, *sconns]
 
 var n_man uint32
 var n_sem uint32
@@ -46,14 +46,14 @@ func loadConfig() {
 
 	_nMan, err := strconv.Atoi(os.Getenv(nNodeKey))
 	nMan := uint32(_nMan)
-	utils.Panic(err, "loadConfig: ENV: undefined %s", nNodeKey)
-	utils.Assert(nMan > 0, "loadConfig: %s needs to be a positive u32: %d", nNodeKey, nMan)
+	utils2.Panic(err, "loadConfig: ENV: undefined %s", nNodeKey)
+	utils2.Assert(nMan > 0, "loadConfig: %s needs to be a positive u32: %d", nNodeKey, nMan)
 	n_man = nMan
 
 	_nSem, err := strconv.Atoi(os.Getenv(nSemKey))
 	nSem := uint32(_nSem)
-	utils.Panic(err, "loadConfig: ENV: undefined %s", nSemKey)
-	utils.Assert(nSem > 0, "loadConfig: %s needs to be a positive u32: %d", nSemKey, nSem)
+	utils2.Panic(err, "loadConfig: ENV: undefined %s", nSemKey)
+	utils2.Assert(nSem > 0, "loadConfig: %s needs to be a positive u32: %d", nSemKey, nSem)
 	n_sem = nSem
 }
 
@@ -71,7 +71,7 @@ func printMans() {
 
 func StartNodeConnServer3() {
 	listener, err := net.Listen("tcp", ":12000")
-	utils.Panic(err, "StartNodeConnServer3: error on net.Listen")
+	utils2.Panic(err, "StartNodeConnServer3: error on net.Listen")
 	defer listener.Close()
 	loadConfig()
 	initNodeConnsManagers3()
@@ -148,7 +148,7 @@ func NodeBroadcast2(nodeId nodeid, payload []byte) {
 type nconn3 struct {
 	// sess  int64
 	iddev iddev
-	conn  *utils.ClientConn
+	conn  *utils2.ClientConn
 	// conn  net.Conn
 	subs []nodeid
 	// res  chan error
@@ -165,9 +165,9 @@ func handleNodeConn3(conn net.Conn) {
 	log.Printf("handleNodeConn: new node conn iddev=%x\n", iddev[:])
 
 	nc := &nconn3{
-		// sess:  utils.MakeTimestamp(),
+		// sess:  utils2.MakeTimestamp(),
 		iddev: iddev,
-		conn:  utils.NewLockedConn(conn),
+		conn:  utils2.NewLockedConn(conn),
 		subs:  make([]nodeid, 0, 5),
 	}
 
@@ -202,9 +202,9 @@ func (nc *nconn3) readFromConn3() {
 	}()
 
 	for {
-		err = utils.ReadBin(nc.conn.C, &connect, nodeId[:], &ts)
+		err = utils2.ReadBin(nc.conn.C, &connect, nodeId[:], &ts)
 		if err != nil {
-			m := utils.SplitMap(nc.subs, idf)
+			m := utils2.SplitMap(nc.subs, idf)
 			for i, subs := range m {
 				man := mans[i]
 				var md []nodeid
@@ -236,7 +236,7 @@ func (nc *nconn3) readFromConn3() {
 		if connect { // connecting to nodeId
 			// if not already connected, we fetch and write
 			// the node if it has any update
-			connected := utils.Contains(nodeId, nc.subs)
+			connected := utils2.Contains(nodeId, nc.subs)
 			if !connected {
 				man := GetNodes(nodeId)
 				success := man.ReadingAt(nodeId, func(e *sconns) {
@@ -276,13 +276,13 @@ func (nc *nconn3) readFromConn3() {
 					nodeId[:], nc.iddev[:])
 			}
 		} else { // disconnecting to nodeId
-			if utils.Contains(nodeId, nc.subs) {
+			if utils2.Contains(nodeId, nc.subs) {
 				var clearNode bool
 				man := GetNodes(nodeId)
 				man.ReadingAt(nodeId, func(e *sconns) {
 					clearNode = e.Delete(nc.iddev) == 0
 				})
-				utils.Remove(nodeId, nc.subs)
+				utils2.Remove(nodeId, nc.subs)
 				nc.conn.WriteBin(DISC_CONF, uint16(len(nodeId)), nodeId)
 				if clearNode {
 					man.DeleteIf(nodeId, func(value *sconns) bool {

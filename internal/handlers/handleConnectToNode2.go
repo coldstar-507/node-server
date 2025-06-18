@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	// "github.com/coldstar-507/utils/id_utils"
+	"github.com/coldstar-507/utils2"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -22,13 +22,13 @@ const heartbeat byte = 0x99
 
 var NCMS *nodeConnsManagers
 var cm = &connMan{
-	conns: make(map[id_utils.Iddev_]*nconn),
+	conns: make(map[utils2.Iddev_]*nconn),
 	addCh: make(chan *nconn),
 	delCh: make(chan *nconn),
 }
 
 type connMan struct {
-	conns        map[id_utils.Iddev_]*nconn
+	conns        map[utils2.Iddev_]*nconn
 	addCh, delCh chan *nconn
 }
 
@@ -69,10 +69,10 @@ func (cm *connMan) run() {
 
 func StartNodeConnServer() {
 	listener, err := net.Listen("tcp", ":12000")
-	utils.Panic(err, "StartNodeConnServer: error on net.Listen")
+	utils2.Panic(err, "StartNodeConnServer: error on net.Listen")
 	defer listener.Close()
 	n, err := strconv.Atoi(os.Getenv("N_NODE_MANAGERS"))
-	utils.Panic(err, "StartNodeConnServer: undefined N_NODE_MANAGERS")
+	utils2.Panic(err, "StartNodeConnServer: undefined N_NODE_MANAGERS")
 	initNodeConnsManagers(uint32(n))
 	go cm.run()
 
@@ -89,12 +89,12 @@ func StartNodeConnServer() {
 
 type ConnMessage struct {
 	Payload []byte
-	NodeId  *id_utils.NodeId
+	NodeId  *utils2.NodeId
 }
 
 type man struct {
 	i               uint32
-	subs            map[id_utils.NodeId]map[id_utils.Iddev_]*nconn
+	subs            map[utils2.NodeId]map[utils2.Iddev_]*nconn
 	sub, unsub      chan *subreq
 	clean           chan *nconn
 	BroadcastUpdate chan *ConnMessage
@@ -103,7 +103,7 @@ type man struct {
 func createMan(r uint32) *man {
 	return &man{
 		i:               r,
-		subs:            make(map[id_utils.NodeId]map[id_utils.Iddev_]*nconn),
+		subs:            make(map[utils2.NodeId]map[utils2.Iddev_]*nconn),
 		sub:             make(chan *subreq),
 		unsub:           make(chan *subreq),
 		clean:           make(chan *nconn),
@@ -113,15 +113,15 @@ func createMan(r uint32) *man {
 
 type nconn struct {
 	sess  int64
-	iddev *id_utils.Iddev_
-	conn  *utils.ClientConn
+	iddev *utils2.Iddev_
+	conn  *utils2.ClientConn
 	// conn  net.Conn
-	subs []id_utils.NodeId
+	subs []utils2.NodeId
 	res  chan error
 }
 
 type subreq struct {
-	nodeId *id_utils.NodeId
+	nodeId *utils2.NodeId
 	nc     *nconn
 	res    chan struct{}
 }
@@ -142,7 +142,7 @@ func initNodeConnsManagers(nMans uint32) {
 	}
 }
 
-func (ncm *nodeConnsManagers) GetMan(nodeId *id_utils.NodeId) *man {
+func (ncm *nodeConnsManagers) GetMan(nodeId *utils2.NodeId) *man {
 	h := fnv.New32()
 	h.Write(nodeId[:])
 	i := h.Sum32() % ncm.nMan
@@ -158,9 +158,9 @@ func (nc *nconn) readFromConn() {
 		err     error
 		ch      = make(chan error)
 		connect bool
-		nodeId  = id_utils.NodeId{}
+		nodeId  = utils2.NodeId{}
 		ts      int64
-		comp    = func(a *id_utils.NodeId, b id_utils.NodeId) bool { return *a == b }
+		comp    = func(a *utils2.NodeId, b utils2.NodeId) bool { return *a == b }
 	)
 
 	go func() {
@@ -181,7 +181,7 @@ func (nc *nconn) readFromConn() {
 
 	for {
 
-		err = utils.ReadBin(nc.conn.C, &connect, nodeId[:], &ts)
+		err = utils2.ReadBin(nc.conn.C, &connect, nodeId[:], &ts)
 		if err != nil {
 			close(ch)
 			// ticker.Stop()
@@ -196,7 +196,7 @@ func (nc *nconn) readFromConn() {
 		if connect {
 			// if not already connected, we fetch and write
 			// the node if it has any update
-			if !utils.ContainsWhere(&nodeId, nc.subs, comp) {
+			if !utils2.ContainsWhere(&nodeId, nc.subs, comp) {
 				nc.subs = append(nc.subs, nodeId)
 				res := make(chan struct{})
 				req := &subreq{res: res, nodeId: &nodeId, nc: nc}
@@ -215,7 +215,7 @@ func (nc *nconn) readFromConn() {
 						bsonId.StringValue())
 					nc.conn.WriteBin(UPDATE_PREFIX, nodeId[:],
 						uint16(len(newNode)), newNode)
-					// utils.WriteBin(nc.conn, UPDATE_PREFIX,
+					// utils2.WriteBin(nc.conn, UPDATE_PREFIX,
 					// nodeId[:], uint16(len(newNode)), newNode)
 				}
 
@@ -224,8 +224,8 @@ func (nc *nconn) readFromConn() {
 					nodeId[:], nc.iddev[:])
 			}
 		} else {
-			if utils.ContainsWhere(&nodeId, nc.subs, comp) {
-				nc.subs, _ = utils.Remove(nodeId, nc.subs)
+			if utils2.ContainsWhere(&nodeId, nc.subs, comp) {
+				nc.subs, _ = utils2.Remove(nodeId, nc.subs)
 				res := make(chan struct{})
 				req := &subreq{res: res, nodeId: &nodeId, nc: nc}
 				NCMS.GetMan(&nodeId).unsub <- req
@@ -297,7 +297,7 @@ func (m *man) Run() {
 			if subs_ := m.subs[*sub.nodeId]; subs_ == nil {
 				log.Printf("man%d: creating sub group for nodeId=%x\n",
 					m.i, sub.nodeId[:])
-				subs_ = make(map[id_utils.Iddev_]*nconn)
+				subs_ = make(map[utils2.Iddev_]*nconn)
 				subs_[*sub.nc.iddev] = sub.nc
 				m.subs[*sub.nodeId] = subs_
 			} else if sub_ := subs_[*sub.nc.iddev]; sub_ != nil {
@@ -350,7 +350,7 @@ func (m *man) Run() {
 }
 
 func handleNodeConn(conn net.Conn) {
-	iddev := id_utils.Iddev_{}
+	iddev := utils2.Iddev_{}
 
 	if _, err := conn.Read(iddev[:]); err != nil {
 		log.Println("HandleNodeConn error reading iddev:", err)
@@ -361,10 +361,10 @@ func handleNodeConn(conn net.Conn) {
 	log.Printf("handleNodeConn: new node conn iddev=%x\n", iddev[:])
 
 	nc := &nconn{
-		sess:  utils.MakeTimestamp(),
+		sess:  utils2.MakeTimestamp(),
 		iddev: &iddev,
-		conn:  utils.NewLockedConn(conn),
-		subs:  make([]id_utils.NodeId, 0, 5),
+		conn:  utils2.NewLockedConn(conn),
+		subs:  make([]utils2.NodeId, 0, 5),
 		res:   make(chan error),
 	}
 
@@ -380,7 +380,7 @@ func handleNodeConn(conn net.Conn) {
 	go nc.readFromConn()
 }
 
-// if err := utils.ReadBin(nc.conn.C, &connect, nodeId[:], &ts); err != nil {
+// if err := utils2.ReadBin(nc.conn.C, &connect, nodeId[:], &ts); err != nil {
 // 	log.Printf("client=%x, error reading:\n%v\ndestroying\n",
 // 		nc.iddev[:], err)
 // 	NodeConnMan.clean <- nc
@@ -390,7 +390,7 @@ func handleNodeConn(conn net.Conn) {
 // if connect {
 // 	// if not already connected, we fetch and write
 // 	// the node if it has any update
-// 	if !utils.ContainsWhere(&nodeId, nc.subs, comp) {
+// 	if !utils2.ContainsWhere(&nodeId, nc.subs, comp) {
 // 		nc.subs = append(nc.subs, nodeId)
 // 		NodeConnMan.sub <- &subreq{nodeId: &nodeId, nc: nc}
 // 		<-nc.res
@@ -400,7 +400,7 @@ func handleNodeConn(conn net.Conn) {
 // 		if newNode != nil {
 // 			nc.conn.WriteBin(UPDATE_PREFIX, nodeId[:],
 // 				uint16(len(newNode)), newNode)
-// 			// utils.WriteBin(nc.conn, UPDATE_PREFIX, nodeId[:],
+// 			// utils2.WriteBin(nc.conn, UPDATE_PREFIX, nodeId[:],
 // 			// 	uint16(len(newNode)), newNode)
 // 		}
 
@@ -409,8 +409,8 @@ func handleNodeConn(conn net.Conn) {
 // 			nodeId[:], nc.iddev[:])
 // 	}
 // } else {
-// 	if utils.ContainsWhere(&nodeId, nc.subs, comp) {
-// 		nc.subs, _ = utils.Remove(nodeId, nc.subs)
+// 	if utils2.ContainsWhere(&nodeId, nc.subs, comp) {
+// 		nc.subs, _ = utils2.Remove(nodeId, nc.subs)
 // 		NodeConnMan.unsub <- &subreq{nodeId: &nodeId, nc: nc}
 // 		<-nc.res
 // 	} else {
@@ -426,7 +426,7 @@ func handleNodeConn(conn net.Conn) {
 
 // func HandleNodeConn(w http.ResponseWriter, r *http.Request) {
 // 	defer r.Body.Close()
-// 	iddev := utils.Iddev{}
+// 	iddev := utils2.Iddev{}
 // 	if wsconn, err := up.Upgrade(w, r, nil); err != nil {
 // 		w.WriteHeader(500)
 // 		log.Println("HandleNodeConn error upgrading:", err)
@@ -438,10 +438,10 @@ func handleNodeConn(conn net.Conn) {
 // 		log.Println("HandleNodeConn error reading into iddev:", err)
 // 	} else {
 // 		wc := &wconn{
-// 			sess:  utils.MakeTimestamp(),
+// 			sess:  utils2.MakeTimestamp(),
 // 			iddev: &iddev,
 // 			conn:  wsconn,
-// 			subs:  make([]*utils.NodeId, 0, 5),
+// 			subs:  make([]*utils2.NodeId, 0, 5),
 // 			res:   make(chan struct{}),
 // 		}
 

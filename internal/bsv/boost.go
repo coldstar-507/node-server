@@ -18,9 +18,10 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	fg "github.com/coldstar-507/flatgen"
 	"github.com/coldstar-507/node-server/internal/db"
-	"github.com/coldstar-507/router/router_utils"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/router-server/router_utils"
+	"github.com/coldstar-507/utils2"
+	// "github.com/coldstar-507/utils/id_utils"
+	// "github.com/coldstar-507/utils/utils"
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/mmcloughlin/geohash"
 	"go.mongodb.org/mongo-driver/bson"
@@ -127,7 +128,7 @@ func validHash(a *fg.AreaT, hash string) bool {
 
 	twoClosest := closest2(a.Perim, boxCenter)
 	for _, b := range bounds {
-		valid := utils.Any(twoClosest, func(ll *fg.LatLonT) bool {
+		valid := utils2.Any(twoClosest, func(ll *fg.LatLonT) bool {
 			return GeoDist(b, a.Center) < ll.RefDist
 		})
 		if valid {
@@ -153,7 +154,7 @@ func CalcLayers(a *fg.AreaT) [][]string {
 		for _, e := range l {
 			nbs := geohash.Neighbors(e)
 			for _, nb := range nbs {
-				if !utils.Contains(nb, flat) && validHash(a, nb) {
+				if !utils2.Contains(nb, flat) && validHash(a, nb) {
 					flat = append(flat, nb)
 					curLayer = append(curLayer, nb)
 				}
@@ -209,7 +210,7 @@ func CalcLayers(a *fg.AreaT) [][]string {
 // 		for _, e := range l {
 // 			nbs := geohash.Neighbors(e)
 // 			for _, nb := range nbs {
-// 				if !utils.Contains(nb, flat) && validHash3(a, nb) {
+// 				if !utils2.Contains(nb, flat) && validHash3(a, nb) {
 // 					flat = append(flat, nb)
 // 					curLayer = append(curLayer, nb)
 // 				}
@@ -362,7 +363,7 @@ type User struct {
 func makeBooster(bld *flatbuffers.Builder, boost *fg.BoosterT, msgId *fg.MessageIdT,
 	sats, utxoIx uint32, s1, rawNodeId, txid []byte, interests []string) []byte {
 	bld.Reset()
-	boost.Prefix = id_utils.KIND_BOOST
+	boost.Prefix = utils2.KIND_BOOST
 	boost.Timestamp = 1 // cannot be 0 value here, it will be mutated
 	boost.RawNodeId = rawNodeId
 	boost.MsgId = msgId
@@ -397,14 +398,14 @@ func writeMedia(mp media_place, metadata []byte, temp *os.File) (*fg.MediaRefT, 
 		log.Println("WriteBoosts: writeTheMedia:", err)
 		return nil, err
 	} else { // will return a simple MediaRef
-		ref := id_utils.ReadRawMediaRef(res.Body)
+		ref := utils2.ReadRawMediaRef(res.Body)
 		return ref, nil
 	}
 }
 
 func WriteBoosts(users map[chat_place][]*User,
 	br *fg.BoostRequest, interests []string, txid []byte, temp *os.File) {
-	ln, f := utils.Pln("WriteBoosts:"), utils.Pf("WriteBoosts: ")
+	ln, f := utils2.Pln("WriteBoosts:"), utils2.Pf("WriteBoosts: ")
 
 	boostMsgBytes, metadataBytes := br.BoostMessageBytes(), br.MediaBytes()
 	relMediaplaces := make(map[chat_place]media_place)
@@ -414,7 +415,7 @@ func WriteBoosts(users map[chat_place][]*User,
 		relMediaplaces[p] = rm[0]
 	}
 
-	var rawNodeId = id_utils.NodeId{}
+	var rawNodeId = utils2.NodeId{}
 
 	relMediaRefs := make(map[chat_place]*fg.MediaRefT)
 
@@ -450,7 +451,7 @@ func WriteBoosts(users map[chat_place][]*User,
 		}
 		defer conn.Close()
 
-		err = utils.WriteBin(conn, byte(0x88), uint16(len(boostMsgBytes)), boostMsgBytes,
+		err = utils2.WriteBin(conn, byte(0x88), uint16(len(boostMsgBytes)), boostMsgBytes,
 			uint32(len(users_)))
 
 		if err != nil {
@@ -466,7 +467,7 @@ func WriteBoosts(users map[chat_place][]*User,
 			hex.Decode(rawNodeId[:], []byte(users_[i].Id))
 			booster := makeBooster(builder, boosterT, bmMsgIdT, br.PricePerHead(),
 				uint32(i+utxoIx), br.S1Bytes(), rawNodeId[:], txid, interests)
-			err := utils.WriteBin(conn, uint16(len(booster)), booster)
+			err := utils2.WriteBin(conn, uint16(len(booster)), booster)
 			if err != nil {
 				ln("err writing boost:", err)
 				return i + utxoIx, err
@@ -475,13 +476,13 @@ func WriteBoosts(users map[chat_place][]*User,
 		}
 
 		var r byte
-		if err := utils.ReadBin(conn, &r); err != nil {
+		if err := utils2.ReadBin(conn, &r); err != nil {
 			ln("err reading completion:", err)
 		} else if r == 0x88 {
 			ln("DONE")
 		} else if r == 0x89 {
 			var n uint32
-			if err = utils.ReadBin(conn, &n); err != nil {
+			if err = utils2.ReadBin(conn, &n); err != nil {
 				ln("err reading n booster wrote:", err)
 			} else {
 				f("completion err: %d booster wrote\n", n)
@@ -532,7 +533,7 @@ func ScanArea(a *fg.AreaT, q *fg.BoostQueryT, lim uint64) (map[uint16][]*User, u
 
 			// check if the user is indeed within the area
 			// because someone can be in a geohash, but not the actual area
-			valid := utils.Any(cl2, func(ll *fg.LatLonT) bool {
+			valid := utils2.Any(cl2, func(ll *fg.LatLonT) bool {
 				return usrDist <= ll.RefDist
 			})
 

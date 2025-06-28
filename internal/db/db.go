@@ -43,7 +43,10 @@ func InitFirebaseMessager() {
 // uri := "mongodb://mongo-node:27017,mongo-node1:27017/?replicatSet=mongo-replicas"
 func InitMongo() {
 	// TODO set in env
-	uri := "mongodb://localhost:27100,localhost:27200"
+	// uri := "mongodb://localhost:27100,localhost:27200"
+	uri := os.Getenv("MONGO_URI")
+	utils2.Assert(len(uri) > 0, "undefined MONGO_URI")
+
 	opt := options.Client().
 		SetReadPreference(readpref.Nearest()).
 		ApplyURI(uri)
